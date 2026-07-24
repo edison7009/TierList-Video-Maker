@@ -119,24 +119,14 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
         card_target_w = int(target_w * 0.65)
         scale = card_target_w / card_img.width
         card_target_h = int(card_img.height * scale)
-    card_resized = card_img.resize((card_target_w, card_target_h), Image.LANCZOS)
-    card_bordered = add_rounded_border(card_resized, border=5, radius=16)
-
-    cx = (target_w - card_bordered.width) // 2
-    cy = (target_h - card_bordered.height) // 2 - int(target_h * 0.03)
-
-    overlay = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
-    pad = 30
-    overlay_draw.rounded_rectangle(
-        [cx - pad, cy - pad,
-         cx + card_bordered.width + pad, cy + card_bordered.height + pad],
-        radius=24, fill=(0, 0, 0, 140),
-    )
-    result = Image.alpha_composite(result.convert("RGBA"), overlay).convert("RGB")
-
-    result.paste(card_bordered.convert("RGB"), (cx, cy),
-                 card_bordered.split()[3] if card_bordered.mode == "RGBA" else None)
+    # Plain right-angle card, no border, no rounded corners, no overlay frame —
+    # just the card image pasted flat on the blurred background. User feedback:
+    # too many effects (rounded corners + layered frames); want simple, flat,
+    # square corners, no decoration.
+    card_resized = card_img.resize((card_target_w, card_target_h), Image.LANCZOS).convert("RGB")
+    cx = (target_w - card_resized.width) // 2
+    cy = (target_h - card_resized.height) // 2 - int(target_h * 0.03)
+    result.paste(card_resized, (cx, cy))
 
     # No tier badge (top-left): the scrolling background already shows the full
     # board with every tier label, so a badge here is redundant (user feedback).
