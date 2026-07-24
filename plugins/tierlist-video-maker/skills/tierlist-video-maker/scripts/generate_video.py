@@ -119,13 +119,20 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
         card_target_w = int(target_w * 0.65)
         scale = card_target_w / card_img.width
         card_target_h = int(card_img.height * scale)
-    # Plain right-angle card, no border, no rounded corners, no overlay frame —
-    # just the card image pasted flat on the blurred background. User feedback:
-    # too many effects (rounded corners + layered frames); want simple, flat,
-    # square corners, no decoration.
+    # Square card, no white border. Keep a semi-transparent dark backing behind
+    # it (SQUARE, not rounded) so the card stays visible when the blurred
+    # background happens to match its colors. User feedback: keep the outer
+    # dark tint, but no border, square corners, no layered frames.
     card_resized = card_img.resize((card_target_w, card_target_h), Image.LANCZOS).convert("RGB")
     cx = (target_w - card_resized.width) // 2
     cy = (target_h - card_resized.height) // 2 - int(target_h * 0.03)
+    pad = 24
+    backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+    ImageDraw.Draw(backing).rectangle(
+        [cx - pad, cy - pad, cx + card_resized.width + pad, cy + card_resized.height + pad],
+        fill=(0, 0, 0, 140),
+    )
+    result = Image.alpha_composite(result.convert("RGBA"), backing).convert("RGB")
     result.paste(card_resized, (cx, cy))
 
     # No tier badge (top-left): the scrolling background already shows the full
