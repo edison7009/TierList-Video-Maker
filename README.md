@@ -66,10 +66,10 @@ Add this repo as a marketplace, then install the plugin:
 
 ```
 /plugin marketplace add edison7009/TierList-Video-Maker
-/plugin install tierlist-video-maker@tiervibe-com
+/plugin install tierlist-video-maker@video-maker
 ```
 
-Skill auto-loads on triggers like "make a video from this TierVibe tier list", or invoke as `/tiervibe-com:tierlist-video-maker`.
+Skill auto-loads on triggers like "make a video from this TierVibe tier list", or invoke as `/video-maker:tierlist-video-maker`.
 
 ## Install — ChatGPT
 

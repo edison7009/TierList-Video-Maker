@@ -49,10 +49,10 @@ TierList-Video-Maker/
 
 ```
 /plugin marketplace add edison7009/TierList-Video-Maker
-/plugin install tierlist-video-maker@tiervibe-com
+/plugin install tierlist-video-maker@video-maker
 ```
 
-触发词如「把这个 TierVibe 做成视频」自动加载,或用 `/tiervibe-com:tierlist-video-maker` 调用。
+触发词如「把这个 TierVibe 做成视频」自动加载,或用 `/video-maker:tierlist-video-maker` 调用。
 
 ## 安装 — ChatGPT
 
