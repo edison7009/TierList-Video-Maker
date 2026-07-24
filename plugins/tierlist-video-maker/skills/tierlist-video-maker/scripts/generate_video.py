@@ -359,7 +359,11 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
 
     clips = []
 
-    intro_img = create_title_frame(board, title, target_w, target_h)
+    # Intro: show the board TOP as-is — the branded title bar (title, up to 2
+    # lines, + logo) is already baked into board_hd.png by capture_board. No
+    # overlaid centered title, no darkening: the viewer opens on the full board
+    # carrying its own title. (user feedback)
+    intro_img = crop_board_at(board, 0, target_w, target_h)
     intro_dur = intro_duration
     intro_audio_clip = None
     if intro_audio and os.path.exists(intro_audio):
