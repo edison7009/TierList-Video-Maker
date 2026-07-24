@@ -19,10 +19,56 @@ TierVibe 服务器只存榜单的 600px 缩略图，没有高清版。要 1080p 
 
 ## 快速开始
 
-1. 作为技能安装（拷到 `~/.claude/skills/` 或 `~/.codex/skills/tierlist-video-maker/`）。
-2. 说：*「帮我把这个 TierVibe 做成视频: https://tiervibe.com/t/xxxxx」*
-3. 审一下生成的讲解稿
-4. 拿到视频 + `.srt`
+1. 安装技能(见下),然后说：*「帮我把这个 TierVibe 做成视频: https://tiervibe.com/t/xxxxx」*
+2. 审一下生成的讲解稿
+3. 拿到视频 + `.srt`
+
+## 仓库结构（双 marketplace）
+
+这个仓库内置**两份** marketplace 目录,让同一插件既能装进 Claude Code,又能装进 Codex/ChatGPT 类工具：
+
+```
+TierList-Video-Maker/
+├── .claude-plugin/
+│   └── marketplace.json            # Claude Code marketplace 目录
+├── .agents/plugins/
+│   └── marketplace.json            # Codex / ChatGPT 类 marketplace 目录
+├── plugins/
+│   └── tierlist-video-maker/
+│       ├── .claude-plugin/plugin.json   # Claude Code 插件清单
+│       ├── .codex-plugin/plugin.json     # Codex 插件清单（带 logo）
+│       └── skills/tierlist-video-maker/{SKILL.md, references/, scripts/}
+└── README.md
+```
+
+## 安装 — Claude Code
+
+把这个仓库加为 marketplace,再装插件：
+
+```
+/plugin marketplace add edison7009/TierList-Video-Maker
+/plugin install tierlist-video-maker@tiervibe-com
+```
+
+触发词如「把这个 TierVibe 做成视频」自动加载,或用 `/tiervibe-com:tierlist-video-maker` 调用。
+
+## 安装 — ChatGPT
+
+1. 打开 ChatGPT → **Plugins**。
+2. 点右上角 **⬇️** 图标。
+3. 选 **Add plugin marketplace**。
+4. 粘贴仓库 URL：`https://github.com/edison7009/TierList-Video-Maker.git`
+5. 确认；`tierlist-video-maker` 出现在插件列表里 —— 启用它。
+
+然后在对话里说 *「帮我把这个 TierVibe 做成视频: https://tiervibe.com/t/xxxxx」* 触发。AI 抓板+卡片图、截高清整图、生成讲解稿给你审、再渲染视频。
+
+## 安装 — Codex (CLI)
+
+仓库内置 `.agents/plugins/marketplace.json`（Codex schema）。添加并启用：
+
+```
+codex plugin marketplace add edison7009/TierList-Video-Maker
+```
 
 ## 脚本
 
@@ -47,6 +93,10 @@ TierVibe 服务器只存榜单的 600px 缩略图，没有高清版。要 1080p 
 - Windows：Microsoft YaHei (msyh.ttc)
 - macOS：PingFang SC
 - Linux：Noto Sans CJK
+
+## 图标
+
+TierVibe logo 放在 `plugins/tierlist-video-maker/assets/logo.svg`（沿用 TierList-Maker 插件同一品牌），Codex 的 `.codex-plugin/plugin.json` 用 `interface.logo` 指向它。marketplace 列表 UI 的图标,可在 GitHub/GitCode 仓库的社交预览图设成同一张 logo。
 
 ## 许可
 
