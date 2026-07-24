@@ -20,3 +20,7 @@ tierlist_work/
 board_hd.png
 board.png
 board_source.*
+
+# Python bytecode (never ship)
+__pycache__/
+*.pyc
