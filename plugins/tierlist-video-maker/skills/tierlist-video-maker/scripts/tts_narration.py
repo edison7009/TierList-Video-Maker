@@ -48,7 +48,18 @@ async def generate_all(script_path: str, out_dir: str, voice: str = "zh-CN-Yunxi
 
         results.append({"index": idx, "audio_file": filename, "text": text})
 
-    audio_manifest = {"voice": voice, "segments": results}
+    # Intro / outro TTS (optional) — generate so the video has a spoken
+    # opening/closing instead of jumping straight to card 1 (user feedback).
+    intro_outro = {}
+    for key, fname in (("intro", "narration_intro.mp3"), ("outro", "narration_outro.mp3")):
+        text = (script.get(key) or "").strip()
+        if text:
+            fp = os.path.join(audio_dir, fname)
+            print(f"  [{key}] {text[:50]}...")
+            await edge_tts.Communicate(text, voice).save(fp)
+            intro_outro[f"{key}_audio"] = fname
+
+    audio_manifest = {"voice": voice, "segments": results, **intro_outro}
     manifest_path = os.path.join(out_dir, "audio_manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(audio_manifest, f, ensure_ascii=False, indent=2)

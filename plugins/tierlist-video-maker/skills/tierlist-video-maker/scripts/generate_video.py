@@ -307,6 +307,8 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         script = json.load(f)
 
     audio_map = {}
+    intro_audio = None
+    outro_audio = None
     audio_manifest_path = os.path.join(work_dir, "audio_manifest.json")
     if os.path.exists(audio_manifest_path):
         with open(audio_manifest_path, "r", encoding="utf-8") as f:
@@ -314,6 +316,10 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         for seg in am.get("segments", []):
             if seg.get("audio_file"):
                 audio_map[seg["index"]] = os.path.join(work_dir, "audio", seg["audio_file"])
+        if am.get("intro_audio"):
+            intro_audio = os.path.join(work_dir, "audio", am["intro_audio"])
+        if am.get("outro_audio"):
+            outro_audio = os.path.join(work_dir, "audio", am["outro_audio"])
 
     board_path = resolve_board_path(work_dir, manifest)
     board = Image.open(board_path).convert("RGB")
@@ -357,7 +363,18 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     clips = []
 
     intro_img = create_title_frame(board, title, target_w, target_h)
-    clips.append(ImageClip(np.array(intro_img), duration=intro_duration))
+    intro_dur = intro_duration
+    intro_audio_clip = None
+    if intro_audio and os.path.exists(intro_audio):
+        try:
+            intro_audio_clip = AudioFileClip(intro_audio)
+            intro_dur = max(0.1, intro_audio_clip.duration) + 0.3
+        except Exception as e:
+            print(f"  [WARN] intro audio load failed: {e}", file=sys.stderr)
+    _intro_clip = ImageClip(np.array(intro_img), duration=intro_dur)
+    if intro_audio_clip is not None:
+        _intro_clip = _intro_clip.with_audio(intro_audio_clip)
+    clips.append(_intro_clip)
 
     elapsed = intro_duration
     n_cards = len(clips_info)
@@ -412,8 +429,22 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
 
         elapsed += real_dur + gap_duration
 
-    outro_img = create_title_frame(board, title, target_w, target_h)
-    clips.append(ImageClip(np.array(outro_img), duration=intro_duration))
+    # Outro: NO title frame (don't repeat the title). Plain darkened+blurred
+    # background scrolled to the end + the outro audio (user feedback).
+    outro_frame = crop_board_at(board, max_scroll, target_w, target_h)
+    outro_frame = darken(outro_frame, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
+    outro_dur = intro_duration
+    outro_audio_clip = None
+    if outro_audio and os.path.exists(outro_audio):
+        try:
+            outro_audio_clip = AudioFileClip(outro_audio)
+            outro_dur = max(0.1, outro_audio_clip.duration) + 0.3
+        except Exception as e:
+            print(f"  [WARN] outro audio load failed: {e}", file=sys.stderr)
+    _outro_clip = ImageClip(np.array(outro_frame), duration=outro_dur)
+    if outro_audio_clip is not None:
+        _outro_clip = _outro_clip.with_audio(outro_audio_clip)
+    clips.append(_outro_clip)
 
     generate_srt(script, audio_map, work_dir, intro_duration, gap_duration)
 

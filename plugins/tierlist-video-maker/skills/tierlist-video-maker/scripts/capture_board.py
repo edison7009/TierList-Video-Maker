@@ -98,7 +98,7 @@ async function captureBoard(pixelRatio, title, logoDataUri) {
   const boardImg = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = boardDataUrl; });
 
   const scale = pixelRatio;
-  const headerH = Math.max(80 * scale, boardImg.width * 0.08);
+  const headerH = Math.max(96 * scale, boardImg.width * 0.10);
   const canvasW = boardImg.width;
   const canvasH = boardImg.height + headerH;
   const canvas = document.createElement('canvas');
@@ -120,18 +120,34 @@ async function captureBoard(pixelRatio, title, logoDataUri) {
   const siteW = tierW + vibeW;
   const rightX = canvasW - pad;
 
-  // Title (left, white bold). Ellipsize if it would overlap the logo + wordmark.
-  const titleFont = `bold ${Math.max(28 * scale, headerH * 0.45)}px Arial, sans-serif`;
+  // Title (left, white bold). Wrap to TWO lines if it overflows; ellipsize line 2.
+  const titleSize = Math.max(28 * scale, headerH * 0.32);
+  const titleFont = `bold ${titleSize}px Arial, sans-serif`;
   ctx.font = titleFont;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   const availW = Math.max(60 * scale, canvasW - pad - pad - logoSize - spacing - siteW);
-  let t = title || '';
-  if (ctx.measureText(t).width > availW) {
-    while (t.length > 0 && ctx.measureText(t + '…').width > availW) t = t.slice(0, -1);
-    t = t + '…';
+  const t = title || '';
+  if (ctx.measureText(t).width <= availW) {
+    // Fits one line — keep it centered.
+    ctx.fillText(t, pad, headerH / 2 + 3 * scale);
+  } else {
+    // Two-line wrap by character (CJK-safe, no word boundary assumption).
+    let line1 = '', line2 = '';
+    for (const ch of t) {
+      if (ctx.measureText(line1 + ch).width <= availW) line1 += ch;
+      else if (ctx.measureText(line2 + ch).width <= availW) line2 += ch;
+      else break;
+    }
+    const remaining = t.slice(line1.length + line2.length);
+    if (remaining) {
+      while (line2.length > 0 && ctx.measureText(line2 + '…').width > availW) line2 = line2.slice(0, -1);
+      line2 += '…';
+    }
+    const lineGap = titleSize * 1.2;
+    ctx.fillText(line1, pad, headerH / 2 - lineGap / 2 + 3 * scale);
+    if (line2) ctx.fillText(line2, pad, headerH / 2 + lineGap / 2 + 3 * scale);
   }
-  ctx.fillText(t, pad, headerH / 2 + 3 * scale);
 
   // Wordmark (right): "Vibe" grey, "Tier" white bold just before it.
   ctx.textBaseline = 'middle';
