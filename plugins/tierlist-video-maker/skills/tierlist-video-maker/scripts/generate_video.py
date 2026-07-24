@@ -43,7 +43,7 @@ def ensure_deps():
 
 ensure_deps()
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import numpy as np
 
 
@@ -380,7 +380,7 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         scroll_y = int(scroll_progress * max_scroll)
 
         bg_frame = crop_board_at(board, scroll_y, target_w, target_h)
-        bg_frame = darken(bg_frame, 0.55)
+        bg_frame = darken(bg_frame, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
 
         card_path = os.path.join(img_dir, card["image_file"])
         card_img = Image.open(card_path).convert("RGB")
@@ -407,7 +407,7 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
 
         gap_scroll = int(gap_progress * max_scroll)
         gap_bg = crop_board_at(board, gap_scroll, target_w, target_h)
-        gap_bg = darken(gap_bg, 0.55)
+        gap_bg = darken(gap_bg, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
         clips.append(ImageClip(np.array(gap_bg), duration=gap_duration))
 
         elapsed += real_dur + gap_duration
