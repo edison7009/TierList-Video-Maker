@@ -89,6 +89,19 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     with urllib.request.urlopen(req, timeout=IMG_TIMEOUT) as resp:
         data = json.loads(resp.read().decode("utf-8"))
 
+    # Fail fast on non-published posts. Drafts / "still editing" posts are not
+    # publicly readable (the API returns 404 / empty), and the video needs a
+    # fully published board. Tell the user clearly instead of failing later
+    # with a vague 404 or empty board.
+    status = data.get("status")
+    if status != "published":
+        raise SystemExit(
+            f"This tier list is NOT published (status={status or 'unknown'}).\n"
+            f"Only published TierVibe posts can be turned into a video — drafts / "
+            f"still-editing posts are not publicly readable and have no board image.\n"
+            f"Publish it first at https://tiervibe.com/t/{slug} , then re-run."
+        )
+
     title = data.get("title", "Untitled")
     tier_count = data.get("tierCount", 0)
     bg_brightness = data.get("bgBrightness", 0)

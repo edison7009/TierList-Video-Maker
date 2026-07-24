@@ -14,6 +14,8 @@ A portable Agent Skills plugin that turns any **published** [TierVibe](https://t
 - **Video** — scrolling tier-list background + per-card zoom overlay + subtitles (SRT).
 - **Works with the agents you already use** — Claude Code, ChatGPT, Codex, and any agentskills.io-compatible tool.
 
+> **Only published posts.** This skill makes a video from a **published** TierVibe post. A draft / a post you're still editing has no board image and is not publicly readable, so it can't be turned into a video — publish it on TierVibe first.
+
 ## Why the board image comes from a browser capture
 
 The TierVibe server only stores a 600px thumbnail of the board, not a

@@ -16,6 +16,19 @@ description: >
 Turn any published TierVibe tier list into a narrated video with a scrolling
 high-resolution background.
 
+## ⚠️ Only published posts — drafts / still-editing posts cannot be used
+
+This skill works on **published** TierVibe posts only. The video needs a board
+image and card images, which exist only once a post is published — a draft / a
+post you're still editing in the editor is **not publicly readable** and has no
+board image, so the scripts cannot fetch it.
+
+If the user gives you a post that isn't published yet: **stop and tell them** —
+"先把它在 TierVibe 上发布,再用这个技能做成视频" / "publish it on TierVibe
+first, then make the video." Do not try to make a video from an editor URL or a
+draft. `fetch_tierlist.py` checks the `status` field and will fail fast with this
+same message if the post isn't published.
+
 ## How the board image is obtained (read this first)
 
 The TierVibe server only stores a 600px thumbnail of the board, not a
