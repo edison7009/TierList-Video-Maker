@@ -102,7 +102,7 @@ codex plugin marketplace add edison7009/TierList-Video-Maker
 ## Dependencies
 
 - Python 3.10+
-- `Pillow`, `requests`
+- `Pillow`
 - `edge-tts` (auto-installed)
 - `moviepy>=2.0` + `numpy` (auto-installed; bundles ffmpeg)
 - `playwright` + Chromium (auto-installed on first `capture_board.py` run; ~150MB browser)

@@ -42,10 +42,20 @@ def _ensure_playwright():
         print("Installing playwright...", file=sys.stderr)
         subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright", "-q"])
     import subprocess
-    subprocess.run(
+    result = subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
-        check=False,
+        capture_output=True, text=True,
     )
+    if result.returncode != 0:
+        # Fail loud with a clear message instead of an opaque "executable
+        # doesn't exist" later at chromium.launch(). The video pipeline still
+        # works — generate_video.py falls back to the 600px thumb when
+        # board_hd.png is absent.
+        raise SystemExit(
+            "Failed to install Playwright Chromium (check network/proxy/disk). "
+            "High-res capture aborted — the video will fall back to the 600px "
+            "thumb from Step 1 (fetch_tierlist.py)."
+        )
 
 
 _INJECT = r"""
@@ -94,14 +104,44 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
                     "data-testid attribute (needs a TierVibe deploy), or the slug is wrong."
                 )
 
+            # Inject html-to-image (same lib the site's download button uses).
+            # add_script_tag resolves on tag INSERTION, not script completion, so
+            # we must wait until htmlToImage is loaded AND exposes toPng —
+            # otherwise evaluate() below hits a ReferenceError race on slow or
+            # blocked CDN loads.
             page.add_script_tag(url=_HTML_TO_IMAGE_CDN)
-            page.wait_for_function("typeof window.htmlToImage !== 'undefined'", timeout=15000)
+            try:
+                page.wait_for_function(
+                    "typeof window.htmlToImage === 'object' && typeof window.htmlToImage.toPng === 'function'",
+                    timeout=30000,
+                )
+            except Exception:
+                raise SystemExit(
+                    "html-to-image failed to load from the CDN. High-res capture "
+                    "aborted — the video will fall back to the 600px thumb from "
+                    "Step 1 (fetch_tierlist.py)."
+                )
 
-            data_url = page.evaluate(
-                f"async () => {{ {_INJECT} return await captureBoard({pixel_ratio}); }}",
-            )
+            # pixel_ratio is an int (argparse type=int enforces it), so this
+            # f-string interpolation is safe. Do NOT change the type to float/str
+            # without switching to a page.evaluate() argument instead.
+            try:
+                data_url = page.evaluate(
+                    f"async () => {{ {_INJECT} return await captureBoard({pixel_ratio}); }}",
+                )
+            except Exception as e:
+                # The most common cause here is a tainted canvas: the read page's
+                # card <img> tags come from cdn.tiervibe.com, and html-to-image's
+                # toPng() throws SecurityError if those aren't CORS-clean for the
+                # page origin. Route to the documented 600px fallback instead of a
+                # raw traceback.
+                raise SystemExit(
+                    f"High-res capture failed (often CDN CORS / canvas taint, or the "
+                    f"tier-grid changed). Falling back to the 600px thumb from Step 1. "
+                    f"Detail: {e}"
+                )
             if not data_url or not data_url.startswith("data:image/png"):
-                raise SystemExit("Capture returned no image data.")
+                raise SystemExit("Capture returned no image data — falling back to the 600px thumb from Step 1.")
 
             import base64
             b64 = data_url.split(",", 1)[1]

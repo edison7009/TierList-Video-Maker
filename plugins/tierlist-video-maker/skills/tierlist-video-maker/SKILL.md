@@ -148,7 +148,7 @@ Provide the output video + subtitles file to the user.
 ## Dependencies
 
 - Python 3.10+
-- `Pillow`, `requests` (usually pre-installed)
+- `Pillow` (usually pre-installed)
 - `edge-tts` (auto-installed; Microsoft online TTS, cross-platform)
 - `moviepy>=2.0` + `numpy` (auto-installed; moviepy bundles ffmpeg)
 - `playwright` + Chromium (for the high-res board capture; auto-installed on

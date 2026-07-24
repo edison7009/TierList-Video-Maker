@@ -10,3 +10,13 @@ desktop.ini
 
 # Claude Code local state (never ship)
 .claude/local/
+
+# Skill script outputs (generated per-run; never ship). The default work
+# directory is tierlist_work/ — everything (manifest, audio/, images/, board
+# images, the .mp4) lands there. Also guard against stray outputs at the repo
+# root if someone runs scripts with -o ./
+tierlist_work/
+*.mp4
+board_hd.png
+board.png
+board_source.*

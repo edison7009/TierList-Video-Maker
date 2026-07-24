@@ -197,6 +197,12 @@ def get_audio_duration(audio_path: str) -> float:
         clip.close()
         return dur
     except Exception:
+        # Neither probe worked (mutagen missing / 0-byte file / decode error).
+        # Falling back to a 5.0s guess will desync subtitles from the real audio
+        # if the audio later loads in moviepy with a different length — warn so
+        # the operator knows a guess was used.
+        print(f"  [WARN] could not probe audio duration for {audio_path}; "
+              f"assuming 5.0s (subtitles may desync).", file=sys.stderr)
         return 5.0
 
 
@@ -285,13 +291,33 @@ def resolve_board_path(work_dir: str, manifest: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Resolution parsing
+# ---------------------------------------------------------------------------
+def _parse_resolution(resolution: str):
+    """Parse a WxH string into (width, height) ints, with a clear error."""
+    try:
+        parts = resolution.lower().split("x")
+        if len(parts) != 2:
+            raise ValueError
+        w, h = int(parts[0].strip()), int(parts[1].strip())
+        if w <= 0 or h <= 0:
+            raise ValueError
+        return w, h
+    except ValueError:
+        raise SystemExit(
+            f"Invalid --resolution {resolution!r}; use WxH, e.g. 1920x1080 "
+            f"(landscape) or 1080x1920 (vertical)."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main video generation
 # ---------------------------------------------------------------------------
 def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080",
                    intro_duration: float = 3.0, gap_duration: float = 0.8):
     from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
 
-    target_w, target_h = map(int, resolution.split("x"))
+    target_w, target_h = _parse_resolution(resolution)
 
     with open(os.path.join(work_dir, "manifest.json"), "r", encoding="utf-8") as f:
         manifest = json.load(f)

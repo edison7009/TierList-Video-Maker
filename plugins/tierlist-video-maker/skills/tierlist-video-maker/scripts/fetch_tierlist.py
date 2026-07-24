@@ -58,7 +58,14 @@ def download(url: str, dest: str) -> bool:
 
 
 def _pick_board_image(data: dict, slug: str):
-    """Return (url, source_label) by priority: fullImageUrl -> thumbUrl -> /og."""
+    """Return (url, source_label) by priority: fullImageUrl -> thumbUrl -> /og.
+
+    NOTE: fullImageUrl is null on every published post in practice (verified on
+    real posts — see references/tiervibe-api.md §2.2). It's kept as the first
+    priority for forward compatibility if TierVibe ever ships the 1600px
+    variant, but the common path today is thumbUrl. Don't remove this branch
+    expecting it to fire — it's intentionally defensive.
+    """
     full = data.get("fullImageUrl")
     if full:
         return full, "fullImageUrl"
@@ -86,8 +93,23 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     api_url = f"{API_BASE}/{slug}"
     print(f"Fetching tier list data: {api_url}")
     req = urllib.request.Request(api_url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=IMG_TIMEOUT) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=IMG_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # Drafts / still-editing posts are not publicly readable -> the API
+        # returns 404. Surface the friendly "publish it first" message instead
+        # of a raw HTTPError traceback.
+        if e.code == 404:
+            raise SystemExit(
+                f"This tier list is not publicly readable (API returned 404 for {slug}).\n"
+                f"Only published TierVibe posts can be turned into a video — drafts / "
+                f"still-editing posts are not public and have no board image.\n"
+                f"Publish it first at https://tiervibe.com/t/{slug} , then re-run."
+            ) from e
+        raise SystemExit(f"API request failed (HTTP {e.code}) for {slug}: {e}") from e
+    except urllib.error.URLError as e:
+        raise SystemExit(f"Could not reach the TierVibe API for {slug}: {e}") from e
 
     # Fail fast on non-published posts. Drafts / "still editing" posts are not
     # publicly readable (the API returns 404 / empty), and the video needs a

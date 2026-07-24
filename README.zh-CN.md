@@ -85,7 +85,7 @@ codex plugin marketplace add edison7009/TierList-Video-Maker
 ## 依赖
 
 - Python 3.10+
-- `Pillow`、`requests`
+- `Pillow`
 - `edge-tts`（自动安装）
 - `moviepy>=2.0` + `numpy`（自动安装；自带 ffmpeg）
 - `playwright` + Chromium（首次跑 `capture_board.py` 时自动安装；约 150MB 浏览器）
