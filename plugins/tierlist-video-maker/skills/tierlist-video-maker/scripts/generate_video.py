@@ -138,28 +138,10 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
     result.paste(card_bordered.convert("RGB"), (cx, cy),
                  card_bordered.split()[3] if card_bordered.mode == "RGBA" else None)
 
-    draw = ImageDraw.Draw(result)
-    font_large = get_font(max(26, target_h // 28))
-    font_small = get_font(max(18, target_h // 38))
-
-    badge_text = f" {tier_name} "
-    bb = draw.textbbox((0, 0), badge_text, font=font_large)
-    bw, bh = bb[2] - bb[0] + 24, bb[3] - bb[1] + 14
-    bx, by = int(target_w * 0.04), int(target_h * 0.04)
-    tc = tier_color.lstrip("#")
-    r, g, b = (int(tc[0:2], 16), int(tc[2:4], 16), int(tc[4:6], 16)) if len(tc) == 6 else (255, 127, 127)
-    draw.rounded_rectangle([bx, by, bx + bw, by + bh], radius=10, fill=(r, g, b))
-    lum = 0.299 * r + 0.587 * g + 0.114 * b
-    draw.text((bx + 12, by + 5), badge_text.strip(),
-              fill=(0, 0, 0) if lum > 128 else (255, 255, 255), font=font_large)
-
-    if card_label:
-        lb = draw.textbbox((0, 0), card_label, font=font_small)
-        lw = lb[2] - lb[0]
-        lx = (target_w - lw) // 2
-        ly = cy + card_bordered.height + 14
-        draw.text((lx + 2, ly + 2), card_label, fill=(0, 0, 0), font=font_small)
-        draw.text((lx, ly), card_label, fill=(255, 255, 255), font=font_small)
+    # No tier badge (top-left): the scrolling background already shows the full
+    # board with every tier label, so a badge here is redundant (user feedback).
+    # No card label text: the card image is clear on its own, and a wrong
+    # AI-guessed label under it would be misleading (user feedback).
 
     return result
 

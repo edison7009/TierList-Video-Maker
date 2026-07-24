@@ -4,24 +4,31 @@
 Usage:
     python capture_board.py "<URL_OR_SLUG>" -o <work_dir>
 
-This is how the video gets a true high-resolution background WITHOUT hitting the
-TierVibe server for a board image (the server only stores a 600px thumbnail). It
-runs a headless Chromium, opens the public read page https://tiervibe.com/t/<slug>
-(no login needed — published posts are public), and uses the SAME html-to-image
-approach the in-browser "download whole image" button uses, but automated:
-
-    find the node with data-testid="tier-grid"  ->  html-to-image.toPng(pixelRatio=2)
-
-So the whole-image export stays a USER-SIDE action (no server call), just done by
-a script instead of a button click. Output: <work_dir>/board_hd.png.
-
-Requirements: Playwright with Chromium. Auto-installs on first run.
+Produces board_hd.png = the tier grid + a branded title bar on top (title left,
+TierVibe logo + "Tier"/"Vibe" wordmark right) — i.e. the SAME image the in-page
+"download whole image" button produces (SaveImage.saveImage(includeTitle=true)),
+so the video background carries the TierVibe brand. Runs headless Chromium on
+the public page (no login, no TierVibe server call for the image). The title is
+fetched from the public API; the logo is bundled in the skill (assets/logo.svg).
 """
 
 import argparse
+import base64
+import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.request
+
+API_BASE = "https://tiervibe.com/api/posts"
+USER_AGENT = "TierListVideoMaker/1.0"
+IMG_TIMEOUT = 30
+
+# assets/logo.svg lives three directories above this script:
+# scripts/ -> skills/tierlist-video-maker/ -> skills/ -> plugins/tierlist-video-maker/ -> assets/
+_LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "..", "..", "..", "assets", "logo.svg")
 
 
 def extract_slug(url_or_id: str) -> str:
@@ -47,10 +54,6 @@ def _ensure_playwright():
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        # Fail loud with a clear message instead of an opaque "executable
-        # doesn't exist" later at chromium.launch(). The video pipeline still
-        # works — generate_video.py falls back to the 600px thumb when
-        # board_hd.png is absent.
         raise SystemExit(
             "Failed to install Playwright Chromium (check network/proxy/disk). "
             "High-res capture aborted — the video will fall back to the 600px "
@@ -58,17 +61,101 @@ def _ensure_playwright():
         )
 
 
+def _fetch_title(slug: str) -> str:
+    """Fetch the post title from the public API (capture needs it for the bar)."""
+    api_url = f"{API_BASE}/{slug}"
+    try:
+        req = urllib.request.Request(api_url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=IMG_TIMEOUT) as resp:
+            return json.loads(resp.read().decode("utf-8")).get("title", "") or ""
+    except Exception as e:
+        print(f"  [WARN] could not fetch title from API: {e}", file=sys.stderr)
+        return ""
+
+
+def _load_logo_data_uri() -> str:
+    """Read the bundled logo.svg as a data: URI (keeps the canvas untainted)."""
+    try:
+        with open(_LOGO_PATH, "rb") as f:
+            return "data:image/svg+xml;base64," + base64.b64encode(f.read()).decode("ascii")
+    except Exception as e:
+        print(f"  [WARN] logo not found at {_LOGO_PATH}: {e} — wordmark still draws.", file=sys.stderr)
+        return ""
+
+
+# JS injected into the page. Replicates SaveImage.drawHeader: title left, logo
+# + "Tier"/"Vibe" wordmark right, on a dark band above the captured tier grid.
 _INJECT = r"""
-async function captureBoard(pixelRatio) {
+async function captureBoard(pixelRatio, title, logoDataUri) {
   const node = document.querySelector('[data-testid="tier-grid"]');
-  if (!node) throw new Error('tier-grid node not found (page may be loading or slug wrong)');
+  if (!node) throw new Error('tier-grid node not found');
   const imgs = Array.from(node.querySelectorAll('img'));
   await Promise.all(imgs.map(img => img.complete
     ? Promise.resolve()
     : new Promise(res => { img.addEventListener('load', res, {once:true}); img.addEventListener('error', res, {once:true}); })));
   await new Promise(r => setTimeout(r, 400));
-  const dataUrl = await htmlToImage.toPng(node, { pixelRatio: pixelRatio, cacheBust: false });
-  return dataUrl;
+  const boardDataUrl = await htmlToImage.toPng(node, { pixelRatio: pixelRatio, cacheBust: false });
+  const boardImg = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = boardDataUrl; });
+
+  const scale = pixelRatio;
+  const headerH = Math.max(80 * scale, boardImg.width * 0.08);
+  const canvasW = boardImg.width;
+  const canvasH = boardImg.height + headerH;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW; canvas.height = canvasH;
+  const ctx = canvas.getContext('2d');
+  // Dark header band + the board beneath it.
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(0, 0, canvasW, headerH);
+  ctx.drawImage(boardImg, 0, headerH);
+
+  const pad = 20 * scale;
+  const logoSize = headerH * 0.6;
+  const spacing = 12 * scale;
+  const wmSize = headerH * 0.42;
+  ctx.font = `bold ${wmSize}px Arial, sans-serif`;
+  const tierW = ctx.measureText('Tier').width;
+  ctx.font = `400 ${wmSize}px Arial, sans-serif`;
+  const vibeW = ctx.measureText('Vibe').width;
+  const siteW = tierW + vibeW;
+  const rightX = canvasW - pad;
+
+  // Title (left, white bold). Ellipsize if it would overlap the logo + wordmark.
+  const titleFont = `bold ${Math.max(28 * scale, headerH * 0.45)}px Arial, sans-serif`;
+  ctx.font = titleFont;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const availW = Math.max(60 * scale, canvasW - pad - pad - logoSize - spacing - siteW);
+  let t = title || '';
+  if (ctx.measureText(t).width > availW) {
+    while (t.length > 0 && ctx.measureText(t + '…').width > availW) t = t.slice(0, -1);
+    t = t + '…';
+  }
+  ctx.fillText(t, pad, headerH / 2 + 3 * scale);
+
+  // Wordmark (right): "Vibe" grey, "Tier" white bold just before it.
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = `400 ${wmSize}px Arial, sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.fillText('Vibe', rightX, headerH / 2 + 3 * scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${wmSize}px Arial, sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.fillText('Tier', rightX - vibeW - 0.4, headerH / 2 + 3 * scale);
+
+  // Logo (right of wordmark's left edge).
+  if (logoDataUri) {
+    try {
+      const logo = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = logoDataUri; });
+      if (logo) {
+        const logoY = (headerH - logoSize) / 2;
+        const logoX = rightX - siteW - spacing - logoSize;
+        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+      }
+    } catch (e) {}
+  }
+  return canvas.toDataURL('image/png');
 }
 """
 
@@ -82,6 +169,10 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
     url = f"https://tiervibe.com/t/{slug}"
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "board_hd.png")
+
+    title = _fetch_title(slug)
+    logo_data_uri = _load_logo_data_uri()
+    print(f"Title: {title or '(none)'}  |  logo: {'yes' if logo_data_uri else 'no'}")
 
     from playwright.sync_api import sync_playwright
 
@@ -104,11 +195,6 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
                     "data-testid attribute (needs a TierVibe deploy), or the slug is wrong."
                 )
 
-            # Inject html-to-image (same lib the site's download button uses).
-            # add_script_tag resolves on tag INSERTION, not script completion, so
-            # we must wait until htmlToImage is loaded AND exposes toPng —
-            # otherwise evaluate() below hits a ReferenceError race on slow or
-            # blocked CDN loads.
             page.add_script_tag(url=_HTML_TO_IMAGE_CDN)
             try:
                 page.wait_for_function(
@@ -122,19 +208,12 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
                     "Step 1 (fetch_tierlist.py)."
                 )
 
-            # pixel_ratio is an int (argparse type=int enforces it), so this
-            # f-string interpolation is safe. Do NOT change the type to float/str
-            # without switching to a page.evaluate() argument instead.
             try:
                 data_url = page.evaluate(
-                    f"async () => {{ {_INJECT} return await captureBoard({pixel_ratio}); }}",
+                    f"async (params) => {{ {_INJECT} return await captureBoard(params.pixelRatio, params.title, params.logoDataUri); }}",
+                    {"pixelRatio": pixel_ratio, "title": title, "logoDataUri": logo_data_uri},
                 )
             except Exception as e:
-                # The most common cause here is a tainted canvas: the read page's
-                # card <img> tags come from cdn.tiervibe.com, and html-to-image's
-                # toPng() throws SecurityError if those aren't CORS-clean for the
-                # page origin. Route to the documented 600px fallback instead of a
-                # raw traceback.
                 raise SystemExit(
                     f"High-res capture failed (often CDN CORS / canvas taint, or the "
                     f"tier-grid changed). Falling back to the 600px thumb from Step 1. "
@@ -143,11 +222,10 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
             if not data_url or not data_url.startswith("data:image/png"):
                 raise SystemExit("Capture returned no image data — falling back to the 600px thumb from Step 1.")
 
-            import base64
             b64 = data_url.split(",", 1)[1]
             with open(out_path, "wb") as f:
                 f.write(base64.b64decode(b64))
-            print(f"High-res board captured: {out_path}")
+            print(f"High-res board captured (with title bar): {out_path}")
             return out_path
         finally:
             browser.close()
