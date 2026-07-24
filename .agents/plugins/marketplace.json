@@ -1,7 +1,7 @@
 {
   "name": "video-maker",
   "interface": {
-    "displayName": "TierVibe"
+    "displayName": "TierList-Video-Maker"
   },
   "plugins": [
     {
