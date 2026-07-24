@@ -360,14 +360,23 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     clips.append(ImageClip(np.array(intro_img), duration=intro_duration))
 
     elapsed = intro_duration
-    for tier, card, dur, audio_path in clips_info:
+    n_cards = len(clips_info)
+    for k, (tier, card, dur, audio_path) in enumerate(clips_info):
         idx = card["index"]
         seg = seg_lookup.get(idx, {})
         card_label = seg.get("label", card.get("label", ""))
         tier_name = tier["name"]
         tier_color = tier["color"]
 
-        scroll_progress = elapsed / total_content_dur
+        # Scroll by CARD INDEX (k of n), not by elapsed time — so the background
+        # reaches the k-th card's area as that card is narrated, instead of
+        # stalling when one card's audio runs long (the old time-proportional
+        # scroll desynced from the narration).
+        if n_cards > 1:
+            scroll_progress = k / (n_cards - 1)
+            gap_progress = (k + 0.5) / (n_cards - 1)
+        else:
+            scroll_progress = gap_progress = 0.0
         scroll_y = int(scroll_progress * max_scroll)
 
         bg_frame = crop_board_at(board, scroll_y, target_w, target_h)
@@ -378,17 +387,30 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         frame = create_card_overlay(bg_frame, card_img, tier_name, tier_color,
                                      card_label, target_w, target_h)
 
-        clip = ImageClip(np.array(frame), duration=dur)
+        # Audio-true duration: load the ACTUAL audio clip and use its real
+        # length (+0.5s tail) so the frame matches the spoken audio exactly.
+        # This kills the 5.0s-fallback desync (get_audio_duration could guess
+        # wrong while the real audio played a different length). Keep the clip
+        # object to attach it.
+        audio_clip = None
+        real_dur = 5.0
         if audio_path and os.path.exists(audio_path):
-            clip = clip.with_audio(AudioFileClip(audio_path))
+            try:
+                audio_clip = AudioFileClip(audio_path)
+                real_dur = max(0.1, audio_clip.duration) + 0.5
+            except Exception as e:
+                print(f"  [WARN] audio load failed for card {idx}: {e}; frame=5.0s", file=sys.stderr)
+        clip = ImageClip(np.array(frame), duration=real_dur)
+        if audio_clip is not None:
+            clip = clip.with_audio(audio_clip)
         clips.append(clip)
 
-        gap_scroll = int(((elapsed + dur) / total_content_dur) * max_scroll)
+        gap_scroll = int(gap_progress * max_scroll)
         gap_bg = crop_board_at(board, gap_scroll, target_w, target_h)
         gap_bg = darken(gap_bg, 0.55)
         clips.append(ImageClip(np.array(gap_bg), duration=gap_duration))
 
-        elapsed += dur + gap_duration
+        elapsed += real_dur + gap_duration
 
     outro_img = create_title_frame(board, title, target_w, target_h)
     clips.append(ImageClip(np.array(outro_img), duration=intro_duration))
