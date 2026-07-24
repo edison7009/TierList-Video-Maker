@@ -32,7 +32,7 @@ would do.
 
 ## Quick start
 
-1. Install the skill (see below), then say: *"帮我把这个 TierVibe 做成视频: https://tiervibe.com/t/xxxxx"*
+1. Install the skill (see below), then say: *"Make a video from this TierVibe tier list: https://tiervibe.com/t/xxxxx"*
 2. Review the generated narration script
 3. Get your video + `.srt`
 
@@ -79,7 +79,7 @@ Skill auto-loads on triggers like "make a video from this TierVibe tier list", o
 4. Paste the repo URL: `https://github.com/edison7009/TierList-Video-Maker.git`
 5. Confirm; `tierlist-video-maker` appears in the plugin list — enable it.
 
-Then say *"帮我把这个 TierVibe 做成视频: https://tiervibe.com/t/xxxxx"* in chat to trigger it. The AI fetches the board + cards, captures the high-res board, drafts a narration script for your review, then renders the video.
+Then say *"Make a video from this TierVibe tier list: https://tiervibe.com/t/xxxxx"* in chat to trigger it. The AI fetches the board + cards, captures the high-res board, drafts a narration script for your review, then renders the video.
 
 ## Install — Codex (CLI)
 
@@ -97,6 +97,7 @@ codex plugin marketplace add edison7009/TierList-Video-Maker
 | `scripts/capture_board.py` | Capture a high-res board image from the public page (Playwright) |
 | `scripts/render_board.py` | Fallback: rebuild an approximate board from card images |
 | `scripts/tts_narration.py` | Generate TTS audio from the narration script |
+| `scripts/build_card_manifest.py` | Build a human-readable card table (file ↔ name ↔ tier ↔ narration) |
 | `scripts/generate_video.py` | Compose video with scrolling background + subtitles |
 
 ## Dependencies

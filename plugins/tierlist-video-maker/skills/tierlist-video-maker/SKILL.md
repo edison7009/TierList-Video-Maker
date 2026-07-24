@@ -29,6 +29,25 @@ first, then make the video." Do not try to make a video from an editor URL or a
 draft. `fetch_tierlist.py` checks the `status` field and will fail fast with this
 same message if the post isn't published.
 
+## ⚠️ Multimodal (image recognition) is required — be honest if you can't
+
+This skill needs **AI vision**: the TierVibe API returns no card text labels —
+card names are baked into the card images, so you (the model running this
+skill) must look at each card image and identify what it depicts before you
+can write any narration.
+
+**If you do NOT support image recognition** (you can't view/identify images),
+**stop at Step 4 and tell the user plainly** — do NOT fabricate card names or
+hallucinate narration. Say, in the user's language:
+
+> "I can't make this video — I can't recognize the card images. Use a
+> multimodal model that supports image recognition (e.g. GPT-4o, Claude with
+> vision, Gemini), or tell me what each card is and I'll take it from there."
+
+Image recognition is the model's own capability, not something this skill can
+work around — same principle as image search in the TierList-Maker skill. Be
+honest; do not pretend.
+
 ## How the board image is obtained (read this first)
 
 The TierVibe server only stores a 600px thumbnail of the board, not a
@@ -81,7 +100,13 @@ images. Use vision:
 
 1. Read `manifest.json` for card image files in `images/`.
 2. View each card image, identify what it depicts (movie, character, product…).
-3. Record the label for each card.
+3. **Write the label back into `manifest.json`** — set each card's `label`
+   field to the identified name. This keeps the file↔name mapping in one place
+   so Step 5½'s table and Step 5's narration both read from it. Do not leave
+   `label` empty if you recognized the card.
+
+If you cannot recognize an image, ask the user for that one card rather than
+guessing — a wrong label will mislead the entire narration.
 
 ### Step 5 — Generate narration script
 
@@ -105,6 +130,27 @@ Rules:
 - Each segment: 1-3 sentences, concise and engaging.
 - Group by tier: introduce each tier before its cards.
 - `index` must match the card index in `manifest.json`.
+
+### Step 5½ — Generate the card manifest table (file ↔ name ↔ tier ↔ narration)
+
+After the narration is written, generate a human-readable mapping so you and
+the user can verify every image file maps to the right card name, tier, and
+narration — no "which `card_003.png` was that?" confusion:
+
+```bash
+python <skill_dir>/scripts/build_card_manifest.py <work_dir>
+```
+
+Reads `manifest.json` (file + tier) + `narration_script.json` (label + narration),
+writes `card_manifest.md` — one row per card:
+
+| index | image file | tier | card name | narration (preview) |
+|---|---|---|---|---|
+| 0 | card_000.webp | 夯 | 哪吒之魔童降世 | 第一名,哪吒之魔童降世。这部电影... |
+
+Show this table to the user in Step 6 review — it's the single source of truth
+for "which file is which card". If a row is wrong, fix it in `manifest.json`
+(label) or `narration_script.json` (narration) and re-run this script.
 
 ### Step 6 — User review
 
@@ -176,3 +222,7 @@ Cross-platform font detection in the render/compose scripts:
 - **Video encoding fails**: moviepy bundles ffmpeg; if issues, install ffmpeg.
 - **Font missing**: scripts fall back to a default font; install Noto Sans CJK on Linux.
 - **Card unclear**: ask the user to help identify specific cards.
+- **Model can't recognize images**: if you (the running model) have no image
+  recognition, do NOT fabricate card names — stop and tell the user to switch
+  to a multimodal model, or have them name each card. See the "Multimodal is
+  required" section above.
