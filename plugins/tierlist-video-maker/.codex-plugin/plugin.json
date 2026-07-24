@@ -1,0 +1,25 @@
+{
+  "name": "tierlist-video-maker",
+  "version": "1.0.0",
+  "description": "Turn a published TierVibe tier list into a narrated video. Fetches the tier list + card images, captures a high-resolution board image from the public page (Playwright, no server call), identifies cards via AI vision, generates a reviewable narration script, TTS, subtitles, and a scrolling-background video.",
+  "author": { "name": "TierVibe", "url": "https://tiervibe.com" },
+  "homepage": "https://tiervibe.com",
+  "license": "MIT",
+  "keywords": ["tier-list", "tierlist", "video", "narration", "tts", "tiervibe", "ranking-video"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "TierList Video Maker",
+    "shortDescription": "Turn a published TierVibe tier list into a narrated video.",
+    "longDescription": "Fetches the tier list and card images, captures a high-resolution board image from the public page via Playwright (the whole-image export is a user-side action, automated — no TierVibe server call), identifies each card with AI vision, drafts a narration script for user review, generates TTS audio + SRT subtitles, and composes a video with a scrolling tier-list background and per-card zoom overlays.",
+    "developerName": "TierVibe",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://tiervibe.com/",
+    "logo": "./assets/logo.svg",
+    "logoDark": "./assets/logo.svg",
+    "composerIcon": "./assets/logo.svg",
+    "brandColor": "#181818",
+    "defaultPrompt": ["Make a video from this TierVibe tier list", "把这个 TierVibe 做成视频", "Narrate this tier list into a video"],
+    "screenshots": []
+  }
+}

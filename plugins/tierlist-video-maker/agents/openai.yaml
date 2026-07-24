@@ -1,0 +1,4 @@
+interface:
+  display_name: "TierList Video Maker"
+  short_description: "Turn a published TierVibe tier list into a narrated video"
+  default_prompt: "Help me make a video from this TierVibe tier list"

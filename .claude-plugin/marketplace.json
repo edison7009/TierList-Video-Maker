@@ -1,0 +1,16 @@
+{
+  "name": "tiervibe-com",
+  "owner": { "name": "TierVibe", "url": "https://tiervibe.com" },
+  "plugins": [
+    {
+      "name": "tierlist-video-maker",
+      "source": "./plugins/tierlist-video-maker",
+      "description": "Turn a published TierVibe tier list into a narrated video. Fetches the tier list + card images, captures a high-resolution board image from the public page (Playwright, no server call), identifies cards via AI vision, generates a reviewable narration script, TTS, subtitles, and a scrolling-background video.",
+      "version": "1.0.0",
+      "author": { "name": "TierVibe", "url": "https://tiervibe.com" },
+      "homepage": "https://tiervibe.com",
+      "license": "MIT",
+      "keywords": ["tier-list", "tierlist", "video", "narration", "tts", "tiervibe", "ranking-video"]
+    }
+  ]
+}
