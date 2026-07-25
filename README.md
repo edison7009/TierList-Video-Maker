@@ -22,8 +22,8 @@ There are already TierList video generators out there, but the output is usually
 
 ## Two steps, that simple
 
-1. Make a deep, content-rich tier list with **[TierList-Maker](https://github.com/edison7009/TierList-Maker)** (produces a `.tiervibe.json`, imported via TierVibe's `/t/import`, then published).
-2. Turn that published tier list into a narrated video with **TierList-Video-Maker** (this skill).
+1. Make a deep, content-rich tier list with **[TierList-Maker](https://github.com/edison7009/TierList-Maker)** and publish it on [tiervibe.com](https://tiervibe.com).
+2. Paste the published post's link (`https://tiervibe.com/t/xxxxx`) to this skill — it turns the list into a narrated video, fully automated.
 
 > **Only published posts.** This skill makes a video from a **published** TierVibe post. A draft / a post you're still editing has no board image and is not publicly readable, so it can't be turned into a video — publish it on TierVibe first.
 

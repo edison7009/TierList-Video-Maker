@@ -20,8 +20,8 @@ TierList 类型的视频自带**深度和话题度**——谁排第几、谁被�
 
 ## 两步法，就这么简单
 
-1. 先用 **[TierList-Maker](https://github.com/edison7009/TierList-Maker)** 做一张有深度、有内容的榜单（产出 `.tiervibe.json`，在 TierVibe `/t/import` 导入并发布）。
-2. 再用 **TierList-Video-Maker**（本 skill）把已发布的榜单做成带讲解的视频。
+1. 先用 **[TierList-Maker](https://github.com/edison7009/TierList-Maker)** 做一张有深度、有内容的榜单，发布到 [tiervibe.com](https://tiervibe.com)。
+2. 复制已发布榜单的链接（`https://tiervibe.com/t/xxxxx`）丢给本 skill —— 它全自动把榜单做成带讲解的视频。
 
 > **仅限已发布帖子。** 草稿 / 还在编辑器里编辑中的帖子没有整图、也不公开可读，做不成视频——请先在 TierVibe 上发布。
 
