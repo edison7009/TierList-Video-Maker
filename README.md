@@ -10,7 +10,7 @@ TierList videos carry **depth and a point of view** — who's S-tier, who's tras
 
 ## Why this beats the generic "money-printer" generators
 
-There are already TierList video generators out there, but the output is usually **mediocre**: the thumbnail gets blown up blurry, cards land in the wrong tier, the intro/outro are silent, subtitles drift from the voice, and a static board plays start-to-finish with no rhythm. This skill does each step properly:
+There are already video generators out there, but the output is usually **mediocre**: the thumbnail gets blown up blurry, cards land in the wrong tier, the intro/outro are silent, subtitles drift from the voice, and a static board plays start-to-finish with no rhythm. This skill does each step properly:
 
 - **Board-first AI vision** — the AI reads the **whole board first** (with tier labels + neighbor cards as context) to identify every card, then cross-checks each high-res card image against it. The board is the source of truth for tier and order — not isolated single-logo guessing, so cards are identified correctly and never misplaced.
 - **True high-res board background** — Playwright captures the public page's `[data-testid="tier-grid"]` at ~2560px wide, not a 600px thumbnail stretched blurry.
