@@ -8,7 +8,7 @@
 
 TierList videos carry **depth and a point of view** — who's S-tier, who's trashed, who got snubbed — which is inherently controversial and shareable. On nearly every video platform this format **routinely pops off**, earning plays, followers, and a real path to monetization.
 
-## Why this beats the generic "money-printer" generators
+## Why this beats other AI video generators
 
 There are already video generators out there, but the output is usually **mediocre**: the thumbnail gets blown up blurry, cards land in the wrong tier, the intro/outro are silent, subtitles drift from the voice, and a static board plays start-to-finish with no rhythm. This skill does each step properly:
 
