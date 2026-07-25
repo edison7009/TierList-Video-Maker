@@ -233,6 +233,16 @@ def generate_srt(script: dict, audio_map: dict, work_dir: str,
         text = seg.get("narration", "")
         if not text.strip():
             continue
+        # When the caller passed real per-segment durations (generate_video
+        # does), an idx missing from seg_durations means that card was SKIPPED
+        # in the video loop (missing image_file / file not on disk). The video
+        # has NO clip for it, so emitting a subtitle + advancing the timeline
+        # by 5.0s+ would desync every later subtitle (F2). Skip it + warn.
+        if seg_durations is not None and idx not in seg_durations:
+            print(f"  [WARN] segment index {idx} has narration but no video "
+                  f"clip (card image missing?) — subtitle skipped to avoid "
+                  f"SRT drift.", file=sys.stderr)
+            continue
         if seg_durations and idx in seg_durations:
             dur = seg_durations[idx]
         else:
@@ -369,7 +379,6 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     scripted_indices = {s["index"] for s in script.get("segments", []) if s.get("index", -1) >= 0}
 
     clips_info = []
-    total_content_dur = intro_duration
     img_dir = os.path.join(work_dir, "images")
 
     for tier in manifest.get("tiers", []):
@@ -384,13 +393,13 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
             if not os.path.exists(card_path):
                 continue
             audio_path = audio_map.get(idx)
-            if audio_path and os.path.exists(audio_path):
-                dur = get_audio_duration(audio_path) + 0.5
-            else:
-                dur = 5.0
-            clips_info.append((tier, card, dur, audio_path))
-            total_content_dur += dur + gap_duration
-    total_content_dur += intro_duration  # outro
+            # NOTE: do NOT probe audio duration here. The clip's real duration
+            # is loaded via AudioFileClip in the second loop (real_dur, used for
+            # both the clip and seg_durations). Probing here too would open
+            # every MP3 twice (C3) and feed a guessed 5.0s-fallback duration
+            # into the "Compositing N clips (Xs total)" log (C4). The clips_info
+            # tuple carries (tier, card, audio_path) — no dur.
+            clips_info.append((tier, card, audio_path))
 
     clips = []
 
@@ -418,7 +427,7 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     # the SAME durations the clips actually play at — subtitle timing must
     # follow audio, not a re-probe that can fall back to a 5.0s guess.
     seg_durations = {}
-    for k, (tier, card, dur, audio_path) in enumerate(clips_info):
+    for k, (tier, card, audio_path) in enumerate(clips_info):
         idx = card["index"]
         seg = seg_lookup.get(idx, {})
         card_label = seg.get("label", card.get("label", ""))
@@ -486,6 +495,13 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     if outro_audio_clip is not None:
         _outro_clip = _outro_clip.with_audio(outro_audio_clip)
     clips.append(_outro_clip)
+
+    # Total content duration from the REAL durations actually used (intro_dur,
+    # outro_dur, each card's real_dur + gap), not the old get_audio_duration
+    # guesses that could fall back to 5.0s and mislead the log (C4).
+    total_content_dur = (intro_dur + outro_dur
+                        + sum(seg_durations.values())
+                        + gap_duration * len(clips_info))
 
     generate_srt(script, audio_map, work_dir, intro_duration, gap_duration,
                  intro_dur_actual=intro_dur,

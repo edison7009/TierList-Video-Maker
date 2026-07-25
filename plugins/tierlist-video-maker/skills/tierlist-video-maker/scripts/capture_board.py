@@ -57,7 +57,7 @@ def _ensure_playwright():
         raise SystemExit(
             "Failed to install Playwright Chromium (check network/proxy/disk). "
             "High-res capture aborted — the video will fall back to the 600px "
-            "thumb from Step 1 (fetch_tierlist.py)."
+            "thumb from Step 2 (fetch_tierlist.py)."
         )
 
 
@@ -221,7 +221,7 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
                 raise SystemExit(
                     "html-to-image failed to load from the CDN. High-res capture "
                     "aborted — the video will fall back to the 600px thumb from "
-                    "Step 1 (fetch_tierlist.py)."
+                    "Step 2 (fetch_tierlist.py)."
                 )
 
             try:
@@ -232,11 +232,11 @@ def capture_board(url_or_id: str, out_dir: str, pixel_ratio: int = 2,
             except Exception as e:
                 raise SystemExit(
                     f"High-res capture failed (often CDN CORS / canvas taint, or the "
-                    f"tier-grid changed). Falling back to the 600px thumb from Step 1. "
+                    f"tier-grid changed). Falling back to the 600px thumb from Step 2. "
                     f"Detail: {e}"
                 )
             if not data_url or not data_url.startswith("data:image/png"):
-                raise SystemExit("Capture returned no image data — falling back to the 600px thumb from Step 1.")
+                raise SystemExit("Capture returned no image data — falling back to the 600px thumb from Step 2.")
 
             b64 = data_url.split(",", 1)[1]
             with open(out_path, "wb") as f:

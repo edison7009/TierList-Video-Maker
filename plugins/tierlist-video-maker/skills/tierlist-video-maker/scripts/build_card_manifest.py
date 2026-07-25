@@ -5,7 +5,7 @@ Usage:
     python build_card_manifest.py <work_dir>
 
 Merges the card file + tier (manifest.json, from fetch_tierlist.py) with the
-label + narration (narration_script.json, from Step 5) into ONE markdown table
+label + narration (narration_script.json, from Step 6) into ONE markdown table
 so the user can verify, at a glance, that each image file maps to the right
 card name, tier, and narration — no "which card_003.png was that again?" confusion.
 
@@ -27,7 +27,7 @@ def build(work_dir: str) -> str:
     if not os.path.exists(narration_path):
         raise SystemExit(
             f"narration_script.json not found in {work_dir} — write the narration "
-            f"script (Step 5) first; this table merges label + narration."
+            f"script (Step 6) first; this table merges label + narration."
         )
 
     with open(manifest_path, "r", encoding="utf-8") as f:
@@ -68,8 +68,11 @@ def build(work_dir: str) -> str:
             flag = ""
             if disagree:
                 # Show BOTH labels so the reviewer can pick: board (context)
-                # vs per-card (higher-res individual image).
-                label = f"⚠ board={board_label} | card={card_label_raw}"
+                # vs per-card (higher-res individual image). Escape the literal
+                # separator pipes so the markdown row stays 6 columns (F3 —
+                # an unescaped " | " split the row into 7 cells vs the 6-col
+                # header, corrupting exactly the disagreement rows).
+                label = f"⚠ board={board_label} \\| card={card_label_raw}"
             elif matched is False:
                 flag = " ⚠unmatched"
                 label = label.replace("|", "\\|")

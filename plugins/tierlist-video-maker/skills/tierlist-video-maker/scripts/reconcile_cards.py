@@ -128,7 +128,7 @@ def _match_by_label(board_slots, man_cards):
                 if not mc["label"]:
                     continue
                 r = _fuzzy_ratio(slot["label"], mc["label"])
-                if r > best_score and r >= 0.8:
+                if r > best_score and r >= 0.85:
                     best = mc
                     best_score = r
         if best is not None:
@@ -158,11 +158,18 @@ def _attach_metadata_keep_api_order(manifest, pairs):
                 c["matched"] = True
                 lb, lc = slot["label"], (card.get("label") or "")
                 c["label"] = lb or lc
+                # Set both label fields so build_card_manifest's disagreement
+                # row has both sides to show (C2 — fallback path previously
+                # left these blank, making the ⚠ flag dead signal).
+                c["board_label"] = lb
+                c["card_label"] = lc
                 c["label_disagreement"] = bool(lb and lc and _norm(lb) != _norm(lc))
             else:
                 c["board_tier"] = None
                 c["board_position"] = None
                 c["matched"] = False
+                c["board_label"] = None
+                c["card_label"] = card.get("label") or ""
                 c["label_disagreement"] = False
             cards.append(c)
         new_tiers.append({**tier, "cards": cards})
@@ -202,6 +209,17 @@ def reconcile(work_dir: str) -> dict:
     if not man_cards:
         raise SystemExit("manifest.json has no cards — nothing to reconcile against.")
 
+    # Detect duplicate tier names in the board (F4) — they'd silently merge
+    # into one tier, losing the second tier's color/structure.
+    board_tier_names = [s["tier"] for s in board_slots]
+    if len(set(board_tier_names)) < len(board_tier_names):
+        seen, dups = set(), set()
+        for n in board_tier_names:
+            (dups if n in seen else seen).add(n)
+        print(f"  [WARN] duplicate tier name(s) in board_layout.json: "
+              f"{sorted(dups)} — they will be merged into one tier. "
+              f"Give each board tier a unique name.", file=sys.stderr)
+
     pairs, unmatched_cards = ([], [])
     if len(board_slots) == len(man_cards):
         # API order == board visual order (verified): match by position, use
@@ -223,26 +241,53 @@ def reconcile(work_dir: str) -> dict:
           f"| matched: {matched} ({rate:.0%}) | unmatched manifest cards: {len(unmatched_cards)}")
 
     disagreements = 0
+    comparable = 0  # pairs where BOTH labels are non-empty (have signal)
     for slot, mc in pairs:
         if mc is None:
             continue
-        if slot["label"] and mc["label"] and _norm(slot["label"]) != _norm(mc["label"]):
-            disagreements += 1
+        if slot["label"] and mc["label"]:
+            comparable += 1
+            if _norm(slot["label"]) != _norm(mc["label"]):
+                disagreements += 1
 
-    # Guard: if matching is mostly failing, do NOT reorder — a half-matched
-    # reorder would put card images under wrong tiers and break the video.
-    if rate < 0.5:
-        print("  [WARN] board<->manifest match rate below 50% — NOT reordering. "
-              "Keeping API tier order. Board tags attached where matched. "
-              "Manual review required.", file=sys.stderr)
+    # Back up the pre-reconcile manifest BEFORE any overwrite — including the
+    # fallback path. The fallback (bad matching) is the path most likely to
+    # need recovery, so it must not be the one that skips the backup. (C1)
+    bak = os.path.join(work_dir, "manifest.pre_reconcile.json")
+    shutil.copyfile(manifest_path, bak)
+
+    # Guard 1: low overall match rate (counts-differ path). Don't reorder a
+    # half-matched manifest — orphaned cards would land under _(unmatched)_.
+    # Guard 2 (position-path safety, F1): when counts matched by POSITION,
+    # also require the board's labels to broadly AGREE with the per-card
+    # labels. A board the AI read in the WRONG ORDER (e.g. reversed) has the
+    # right COUNT but every comparable position disagrees — position-zip would
+    # silently assign every card to the wrong tier with reordered_by_board=true
+    # and zero warning, the exact failure this script exists to catch. If most
+    # comparable labels disagree, the board order is not trustworthy: fall back
+    # to API order + warn.
+    label_disagree_rate = (disagreements / comparable) if comparable > 0 else 0.0
+    low_match = rate < 0.5
+    board_order_untrusted = (
+        len(board_slots) == len(man_cards)
+        and comparable > 0
+        and label_disagree_rate > 0.5
+    )
+    if low_match or board_order_untrusted:
+        if low_match:
+            reason = "match rate below 50%"
+        else:
+            reason = (f"board labels disagree with per-card labels in "
+                      f"{label_disagree_rate:.0%} of comparable positions — "
+                      f"board order not trustworthy (likely misread)")
+        print(f"  [WARN] {reason} — NOT reordering. Keeping API tier order. "
+              f"Board tags attached where matched. Manual review required.",
+              file=sys.stderr)
         new_manifest = _attach_metadata_keep_api_order(manifest, pairs)
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(new_manifest, f, ensure_ascii=False, indent=2)
-        print(f"Manifest updated (API order kept): {manifest_path}")
+        print(f"Manifest updated (API order kept): {manifest_path} (backup: {bak})")
         return new_manifest
-
-    bak = os.path.join(work_dir, "manifest.pre_reconcile.json")
-    shutil.copyfile(manifest_path, bak)
 
     # Rebuild manifest.tiers in BOARD visual order. Preserve original tier
     # color/tier_index by looking up the board tier name in the API tiers.
@@ -307,6 +352,11 @@ def reconcile(work_dir: str) -> dict:
                 "label": mc["label"],
                 "board_tier": None,
                 "board_position": None,
+                # Preserve the card's original API tier so the reviewer can see
+                # where the orphan came from when deciding where to re-place it
+                # (A3 — previously dropped, leaving no clue about its origin).
+                "orig_tier": mc["orig_tier"],
+                "orig_color": mc["orig_color"],
                 "card_label": mc["label"],
                 "board_label": None,
                 "matched": False,
