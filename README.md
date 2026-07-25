@@ -1,20 +1,41 @@
 # TierList Video Maker
 
-A portable Agent Skills plugin that turns any **published** [TierVibe](https://tiervibe.com) tier list into a narrated video.
+> A "money-printer" skill — one command turns any TierVibe tier list into a narrated video, with every step engineered tighter than the generic generators.
 
 > 中文版见 [README.zh-CN.md](README.zh-CN.md).
+
+## Why TierList videos are worth making
+
+TierList videos carry **depth and a point of view** — who's S-tier, who's trashed, who got snubbed — which is inherently controversial and shareable. On nearly every video platform this format **routinely pops off**, earning plays, followers, and a real path to monetization.
+
+## Why this beats the generic "money-printer" generators
+
+There are already TierList video generators out there, but the output is usually **mediocre**: the thumbnail gets blown up blurry, cards land in the wrong tier, the intro/outro are silent, subtitles drift from the voice, and a static board plays start-to-finish with no rhythm. This skill does each step properly:
+
+- **Board-first AI vision** — the AI reads the **whole board first** (with tier labels + neighbor cards as context) to identify every card, then cross-checks each high-res card image against it. The board is the source of truth for tier and order — not isolated single-logo guessing, so cards are identified correctly and never misplaced.
+- **True high-res board background** — Playwright captures the public page's `[data-testid="tier-grid"]` at ~2560px wide, not a 600px thumbnail stretched blurry.
+- **AI-written narration, reviewed before production** — not a rigid template read aloud; revise freely, render only after you approve.
+- **Multi-language natural-voice TTS** — zh / en / ja / ko via edge-tts, cross-platform, with **spoken intro and outro** (no silent title frames).
+- **Subtitles timed to the real audio** — the SRT is generated from each segment's measured audio duration, not a fixed 3-second guess, so subtitles stay in sync.
+- **Card zoom overlay + scrolling tier-list background** — the narrated card centers and zooms while the background scrolls to its row, giving the video rhythm instead of a static board from head to tail.
+- **Pairs with `TierList-Maker`** — make a deep, content-rich tier list first, then turn it into a video. Quality starts at the source.
+
+## Two steps, that simple
+
+1. Make a deep, content-rich tier list with **[TierList-Maker](https://github.com/edison7009/TierList-Maker)** (produces a `.tiervibe.json`, imported via TierVibe's `/t/import`, then published).
+2. Turn that published tier list into a narrated video with **TierList-Video-Maker** (this skill).
+
+> **Only published posts.** This skill makes a video from a **published** TierVibe post. A draft / a post you're still editing has no board image and is not publicly readable, so it can't be turned into a video — publish it on TierVibe first.
 
 ## About
 
 - **Fetch** the tier list data + card images from the TierVibe public read API.
 - **Capture a high-resolution board** from the public post page (Playwright runs the same `html-to-image` export the in-page "download whole image" button uses — automated, **no TierVibe server call**).
-- **AI vision** identifies each card (the API returns no text labels — names are baked into the card images).
+- **AI vision** identifies each card (board-first: whole board first, per-card cross-check second, board is truth).
 - **Narration script** — generated, then user-reviewable before production.
-- **TTS** via edge-tts (multi-language, cross-platform).
-- **Video** — scrolling tier-list background + per-card zoom overlay + subtitles (SRT).
+- **TTS** via edge-tts (multi-language, cross-platform, with spoken intro/outro).
+- **Video** — scrolling tier-list background + per-card zoom overlay + subtitles (SRT timed to real audio).
 - **Works with the agents you already use** — Claude Code, ChatGPT, Codex, and any agentskills.io-compatible tool.
-
-> **Only published posts.** This skill makes a video from a **published** TierVibe post. A draft / a post you're still editing has no board image and is not publicly readable, so it can't be turned into a video — publish it on TierVibe first.
 
 ## Why the board image comes from a browser capture
 
@@ -96,7 +117,8 @@ codex plugin marketplace add edison7009/TierList-Video-Maker
 | `scripts/fetch_tierlist.py` | Fetch tier list data + download card images + server thumb |
 | `scripts/capture_board.py` | Capture a high-res board image from the public page (Playwright) |
 | `scripts/render_board.py` | Fallback: rebuild an approximate board from card images |
-| `scripts/tts_narration.py` | Generate TTS audio from the narration script |
+| `scripts/reconcile_cards.py` | Board-first: cross-check whole-board recognition vs per-card, reorder by board truth |
+| `scripts/tts_narration.py` | Generate TTS audio from the narration script (incl. intro/outro) |
 | `scripts/build_card_manifest.py` | Build a human-readable card table (file ↔ name ↔ tier ↔ narration) |
 | `scripts/generate_video.py` | Compose video with scrolling background + subtitles |
 
