@@ -48,16 +48,39 @@ async def generate_all(script_path: str, out_dir: str, voice: str = "zh-CN-Yunxi
 
         results.append({"index": idx, "audio_file": filename, "text": text})
 
-    # Intro / outro TTS (optional) — generate so the video has a spoken
-    # opening/closing instead of jumping straight to card 1 (user feedback).
+    # Intro / outro TTS — generate so the video has a spoken opening / closing
+    # instead of jumping straight to card 1 (user feedback). These are REQUIRED
+    # for a usable video: if the script omits intro/outro text, the video gets a
+    # silent title frame at both ends. Warn loudly (do not silently skip) so the
+    # operator notices and fills them in. Always emit the keys in the manifest
+    # (null when absent) so generate_video can tell "no audio because no text"
+    # apart from "audio generation failed".
     intro_outro = {}
     for key, fname in (("intro", "narration_intro.mp3"), ("outro", "narration_outro.mp3")):
         text = (script.get(key) or "").strip()
-        if text:
-            fp = os.path.join(audio_dir, fname)
-            print(f"  [{key}] {text[:50]}...")
-            await edge_tts.Communicate(text, voice).save(fp)
-            intro_outro[f"{key}_audio"] = fname
+        if not text:
+            print(f"  [WARN] {key} text is EMPTY — the video will have a SILENT "
+                  f"{key} title frame. Fill `{key}` in narration_script.json.",
+                  file=sys.stderr)
+            intro_outro[f"{key}_audio"] = None
+            intro_outro[f"{key}_text_present"] = False
+            continue
+
+        fp = os.path.join(audio_dir, fname)
+        print(f"  [{key}] {text[:50]}...")
+        await edge_tts.Communicate(text, voice).save(fp)
+        # Verify the file is non-zero — a 0-byte mp3 would load as a silent /
+        # broken clip downstream and look like "no voiceover" (the exact bug
+        # this guard exists to catch).
+        if not os.path.exists(fp) or os.path.getsize(fp) == 0:
+            raise SystemExit(
+                f"edge-tts produced an empty/missing {fname} for {key}. "
+                f"This is usually a transient network/voice issue — re-run "
+                f"tts_narration.py. Do NOT proceed: generate_video would attach "
+                f"a broken clip and the {key} would be silent."
+            )
+        intro_outro[f"{key}_audio"] = fname
+        intro_outro[f"{key}_text_present"] = True
 
     audio_manifest = {"voice": voice, "segments": results, **intro_outro}
     manifest_path = os.path.join(out_dir, "audio_manifest.json")

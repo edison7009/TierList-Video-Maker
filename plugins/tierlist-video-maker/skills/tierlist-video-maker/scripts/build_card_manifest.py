@@ -52,19 +52,40 @@ def build(work_dir: str) -> str:
             narration = (seg.get("narration") or "").strip().replace("\n", " ").replace("|", "\\|")
             if len(narration) > 200:
                 narration = narration[:197] + "..."
-            label = label.replace("|", "\\|")
+
+            # Board-first reconciliation columns. After reconcile_cards.py runs,
+            # each card carries board_tier/board_position + the board's label
+            # vs the per-card label. Show board position so the reviewer can
+            # see the visual order, and flag any board-vs-card disagreement so
+            # a wrong AI per-card guess is caught at review time (not in the
+            # final video).
+            board_pos = card.get("board_position")
+            board_pos_s = str(board_pos) if board_pos is not None else "-"
+            board_label = (card.get("board_label") or "").replace("|", "\\|")
+            card_label_raw = (card.get("card_label") or "").replace("|", "\\|")
+            disagree = card.get("label_disagreement", False)
+            matched = card.get("matched")
+            flag = ""
+            if disagree:
+                # Show BOTH labels so the reviewer can pick: board (context)
+                # vs per-card (higher-res individual image).
+                label = f"⚠ board={board_label} | card={card_label_raw}"
+            elif matched is False:
+                flag = " ⚠unmatched"
+                label = label.replace("|", "\\|")
+
             tier_name_clean = tier_name.replace("|", "\\|")
-            rows.append((idx, img, tier_name_clean, label, narration))
+            rows.append((idx, img, tier_name_clean, board_pos_s, label, narration + flag))
 
     lines = [f"# {title}", ""]
     if source_url:
         lines.append(f"Source: {source_url}")
         lines.append("")
     lines += [f"Total cards: {len(rows)}", "",
-              "| index | image file | tier | card name | narration (preview) |",
-              "|---|---|---|---|---|"]
-    for idx, img, tier_name, label, narration in rows:
-        lines.append(f"| {idx} | {img} | {tier_name} | {label} | {narration} |")
+              "| index | image file | tier | board_pos | card name | narration (preview) |",
+              "|---|---|---|---|---|---|"]
+    for idx, img, tier_name, board_pos_s, label, narration in rows:
+        lines.append(f"| {idx} | {img} | {tier_name} | {board_pos_s} | {label} | {narration} |")
 
     out_path = os.path.join(work_dir, "card_manifest.md")
     with open(out_path, "w", encoding="utf-8") as f:

@@ -197,17 +197,33 @@ def _srt_time(seconds: float) -> str:
 
 
 def generate_srt(script: dict, audio_map: dict, work_dir: str,
-                 intro_duration: float, gap_duration: float) -> str:
+                 intro_duration: float, gap_duration: float,
+                 intro_dur_actual: float = None,
+                 outro_dur_actual: float = None,
+                 seg_durations: dict = None) -> str:
+    """Generate subtitles.
+
+    Timing MUST follow the actual audio-clip durations used by generate_video,
+    not a fixed --intro-duration. The old code used ``intro_duration`` (default
+    3.0s) as the intro subtitle end AND as the start offset for every segment,
+    while the real intro clip was ``intro_audio.duration + 0.3`` — so when intro
+    audio ran 6s, the subtitle vanished at 3s and every later subtitle fired
+    ~3s early. Caller passes the measured durations; we only fall back to
+    probing when the caller didn't (legacy callers / no audio).
+    """
     segments = script.get("segments", [])
     srt_path = os.path.join(work_dir, "subtitles.srt")
     lines = []
     sub_idx = 1
-    current_time = intro_duration
+
+    intro_real = intro_dur_actual if intro_dur_actual is not None else intro_duration
+    outro_real = outro_dur_actual if outro_dur_actual is not None else intro_duration
+    current_time = intro_real
 
     intro_text = script.get("intro", "")
     if intro_text:
         lines.append(str(sub_idx))
-        lines.append(f"{_srt_time(0)} --> {_srt_time(intro_duration)}")
+        lines.append(f"{_srt_time(0)} --> {_srt_time(intro_real)}")
         lines.append(intro_text)
         lines.append("")
         sub_idx += 1
@@ -217,11 +233,14 @@ def generate_srt(script: dict, audio_map: dict, work_dir: str,
         text = seg.get("narration", "")
         if not text.strip():
             continue
-        audio_path = audio_map.get(idx)
-        if audio_path and os.path.exists(audio_path):
-            dur = get_audio_duration(audio_path) + 0.5
+        if seg_durations and idx in seg_durations:
+            dur = seg_durations[idx]
         else:
-            dur = 5.0
+            audio_path = audio_map.get(idx)
+            if audio_path and os.path.exists(audio_path):
+                dur = get_audio_duration(audio_path) + 0.5
+            else:
+                dur = 5.0
         start = current_time
         end = current_time + dur
         lines.append(str(sub_idx))
@@ -234,7 +253,7 @@ def generate_srt(script: dict, audio_map: dict, work_dir: str,
     outro_text = script.get("outro", "")
     if outro_text:
         lines.append(str(sub_idx))
-        lines.append(f"{_srt_time(current_time)} --> {_srt_time(current_time + intro_duration)}")
+        lines.append(f"{_srt_time(current_time)} --> {_srt_time(current_time + outro_real)}")
         lines.append(outro_text)
         lines.append("")
 
@@ -318,6 +337,22 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         if am.get("outro_audio"):
             outro_audio = os.path.join(work_dir, "audio", am["outro_audio"])
 
+    # Audio diagnostic summary — surface silent intro/outro at compose time so
+    # "no voiceover" is visible in the log, not buried. (The intro/outro TTS
+    # bug manifested as a silent title frame with no obvious cause.)
+    intro_present = bool(intro_audio and os.path.exists(intro_audio))
+    outro_present = bool(outro_audio and os.path.exists(outro_audio))
+    if not intro_present:
+        print("  [WARN] intro audio MISSING — intro will be a SILENT title frame. "
+              "Did tts_narration.py run with a non-empty `intro` in narration_script.json?",
+              file=sys.stderr)
+    if not outro_present:
+        print("  [WARN] outro audio MISSING — outro will be a SILENT frame. "
+              "Did tts_narration.py run with a non-empty `outro` in narration_script.json?",
+              file=sys.stderr)
+    print(f"Audio: intro={'attached' if intro_present else 'MISSING'} "
+          f"| outro={'attached' if outro_present else 'MISSING'}")
+
     board_path = resolve_board_path(work_dir, manifest)
     board = Image.open(board_path).convert("RGB")
 
@@ -379,6 +414,10 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
 
     elapsed = intro_duration
     n_cards = len(clips_info)
+    # Collect each segment's real (audio-true) duration so generate_srt can use
+    # the SAME durations the clips actually play at — subtitle timing must
+    # follow audio, not a re-probe that can fall back to a 5.0s guess.
+    seg_durations = {}
     for k, (tier, card, dur, audio_path) in enumerate(clips_info):
         idx = card["index"]
         seg = seg_lookup.get(idx, {})
@@ -418,6 +457,7 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
                 real_dur = max(0.1, audio_clip.duration) + 0.5
             except Exception as e:
                 print(f"  [WARN] audio load failed for card {idx}: {e}; frame=5.0s", file=sys.stderr)
+        seg_durations[idx] = real_dur
         clip = ImageClip(np.array(frame), duration=real_dur)
         if audio_clip is not None:
             clip = clip.with_audio(audio_clip)
@@ -447,7 +487,10 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         _outro_clip = _outro_clip.with_audio(outro_audio_clip)
     clips.append(_outro_clip)
 
-    generate_srt(script, audio_map, work_dir, intro_duration, gap_duration)
+    generate_srt(script, audio_map, work_dir, intro_duration, gap_duration,
+                 intro_dur_actual=intro_dur,
+                 outro_dur_actual=outro_dur,
+                 seg_durations=seg_durations)
 
     print(f"Compositing {len(clips)} clips ({total_content_dur:.1f}s total)...")
     final = concatenate_videoclips(clips, method="compose")
