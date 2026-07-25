@@ -1,5 +1,7 @@
 # TierList Video Maker（视频榜单制作器）
 
+> English: [README.md](README.md) ｜ 繁中：[README.zh-Hant.md](README.zh-Hant.md)
+
 > 一个堪比「印钞机」的生成视频 skill —— 一键全自动把 TierVibe 榜单做成带讲解的视频，而且每个环节都比同类生成器更硬核。
 
 ## 为什么 TierList 视频值得做

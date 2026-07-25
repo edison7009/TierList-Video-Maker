@@ -2,7 +2,7 @@
 
 > A "money-printer" video-generation skill — one command turns any TierVibe tier list into a narrated video, with every step engineered tighter than the generic generators.
 
-> 中文版见 [README.zh-CN.md](README.zh-CN.md).
+> 中文（简）见 [README.zh-CN.md](README.zh-CN.md). 繁中見 [README.zh-Hant.md](README.zh-Hant.md).
 
 ## Why TierList videos are worth making
 
