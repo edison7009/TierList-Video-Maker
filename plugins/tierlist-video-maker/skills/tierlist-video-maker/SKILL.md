@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.2
+version: 1.0.3
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
