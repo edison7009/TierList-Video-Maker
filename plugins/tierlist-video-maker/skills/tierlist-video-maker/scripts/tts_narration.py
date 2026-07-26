@@ -13,14 +13,31 @@ import os
 import sys
 
 
-async def generate_all(script_path: str, out_dir: str, voice: str = "zh-CN-YunxiNeural"):
+def _ensure_edge_tts():
+    """Import edge_tts, installing it into this interpreter on first use.
+
+    Returns the module so callers don't repeat the import. Installs once per
+    Python environment — a later run finds it present and skips straight through.
+    """
     try:
         import edge_tts
     except ImportError:
         print("Installing edge-tts...", file=sys.stderr)
         import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "edge-tts", "-q"])
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "edge-tts", "-q"])
+        except subprocess.CalledProcessError as e:
+            raise SystemExit(
+                f"Failed to install edge-tts ({e}). On Debian/Ubuntu or Homebrew "
+                "Python this is usually PEP 668 ('externally-managed-environment') "
+                "— retry with `pip install --user edge-tts`, or run inside a venv."
+            )
         import edge_tts
+    return edge_tts
+
+
+async def generate_all(script_path: str, out_dir: str, voice: str = "zh-CN-YunxiNeural"):
+    edge_tts = _ensure_edge_tts()
 
     with open(script_path, "r", encoding="utf-8") as f:
         script = json.load(f)
@@ -91,12 +108,7 @@ async def generate_all(script_path: str, out_dir: str, voice: str = "zh-CN-Yunxi
 
 
 def list_voices(language: str = "zh"):
-    try:
-        import edge_tts
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "edge-tts", "-q"])
-        import edge_tts
+    edge_tts = _ensure_edge_tts()
 
     async def _list():
         voices = await edge_tts.list_voices()
