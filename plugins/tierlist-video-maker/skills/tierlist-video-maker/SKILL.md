@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.4
+version: 1.0.5
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -153,6 +153,10 @@ source; reconcile_cards.py will keep the API order.
    the label. Write it back into each card's `label` field in `manifest.json`.
    This **confirms** the board recognition; if it disagrees, that's fine — the
    board wins (Step 4 is the truth), but the disagreement is flagged for review.
+   **Exception: text cards.** Their label comes from the card's own data
+   (`label_source: "text_card_data"`), not from reading an image, so it beats the
+   board label — reconcile enforces this. Tier and order still come from the
+   board either way.
 3. Reconcile the two:
 
 ```bash

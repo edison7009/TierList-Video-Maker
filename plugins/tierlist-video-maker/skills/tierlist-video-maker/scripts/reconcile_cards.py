@@ -46,6 +46,23 @@ if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _label_wins_over_board(man_card: dict) -> bool:
+    """True when the manifest's label beats the board's on disagreement.
+
+    Board-first is right for IMAGE cards: the board shows every card in context,
+    so reading it beats naming an isolated thumbnail. It is backwards for TEXT
+    cards. There the label isn't recognized at all — TierVibe encodes it in the
+    card's own data (`text:<urlencoded label>#<fg>#<bg>`) and fetch_tierlist.py
+    reads it out verbatim. Letting a vision misread of the board overwrite an
+    exact string from the data would be a pure downgrade.
+
+    Tier and position still come from the board in both cases — this is only
+    about which spelling of the label survives.
+    """
+    return (man_card.get("label_source") == "text_card_data"
+            and bool((man_card.get("label") or "").strip()))
+
+
 def _norm(label: str) -> str:
     """Normalize a label for comparison: lowercase, strip, drop punctuation/ws."""
     s = (label or "").lower().strip()
@@ -83,6 +100,9 @@ def _flatten_manifest(manifest: dict):
                 "image_url": card.get("image_url"),
                 "card_id": card.get("card_id", ""),
                 "label": (card.get("label") or "").strip(),
+                # "text_card_data" means the label came from the card's own data,
+                # not from reading an image — see _label_wins_over_board().
+                "label_source": card.get("label_source", ""),
                 "orig_tier": tname,
                 "orig_color": tier.get("color", "#333333"),
                 "orig_tier_index": tier.get("tier_index"),
@@ -164,7 +184,7 @@ def _attach_metadata_keep_api_order(manifest, pairs):
                 c["board_position"] = slot["position"]
                 c["matched"] = True
                 lb, lc = slot["label"], (card.get("label") or "")
-                c["label"] = lb or lc
+                c["label"] = lc if _label_wins_over_board(card) else (lb or lc)
                 # Set both label fields so build_card_manifest's disagreement
                 # row has both sides to show (C2 — fallback path previously
                 # left these blank, making the ⚠ flag dead signal).
@@ -329,13 +349,15 @@ def reconcile(work_dir: str) -> dict:
             label_board = slot["label"]
             label_card = mc["label"]
             disagree = bool(label_board and label_card and _norm(label_board) != _norm(label_card))
-            final_label = label_board or label_card
+            final_label = (label_card if _label_wins_over_board(mc)
+                           else (label_board or label_card))
             cards.append({
                 "index": mc["index"],
                 "image_file": mc["image_file"],
                 "image_url": mc["image_url"],
                 "card_id": mc["card_id"],
                 "label": final_label,
+                "label_source": mc.get("label_source", ""),
                 "board_tier": slot["tier"],
                 "board_position": slot["position"],
                 "card_label": label_card,
@@ -361,6 +383,7 @@ def reconcile(work_dir: str) -> dict:
                 "image_url": mc["image_url"],
                 "card_id": mc["card_id"],
                 "label": mc["label"],
+                "label_source": mc.get("label_source", ""),
                 "board_tier": None,
                 "board_position": None,
                 # Preserve the card's original API tier so the reviewer can see
@@ -399,7 +422,9 @@ def reconcile(work_dir: str) -> dict:
 
     if disagreements:
         print(f"  [INFO] {disagreements} card(s) where board label != per-card label "
-              f"— board label used, row flagged in card_manifest.md.", file=sys.stderr)
+              f"— board label used, EXCEPT on text cards where the label comes "
+              f"from the card's own data and wins. Rows flagged in "
+              f"card_manifest.md.", file=sys.stderr)
 
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(new_manifest, f, ensure_ascii=False, indent=2)
