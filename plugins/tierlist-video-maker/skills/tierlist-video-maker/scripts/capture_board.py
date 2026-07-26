@@ -21,6 +21,13 @@ import sys
 import urllib.error
 import urllib.request
 
+if sys.platform == "win32":
+    # The Windows console defaults to the ANSI code page (GBK on zh-CN), which
+    # turns every CJK title, label and path in the log into unreadable bytes.
+    # This skill explicitly supports CJK boards, so readable logs are required.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 API_BASE = "https://tiervibe.com/api/posts"
 USER_AGENT = "TierListVideoMaker/1.0"
 IMG_TIMEOUT = 30

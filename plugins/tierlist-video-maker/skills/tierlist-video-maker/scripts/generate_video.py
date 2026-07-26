@@ -21,6 +21,14 @@ import platform
 import sys
 
 
+if sys.platform == "win32":
+    # The Windows console defaults to the ANSI code page (GBK on zh-CN), turning
+    # every CJK title, label and output path in the log into unreadable bytes.
+    # This skill explicitly supports CJK boards, so readable logs aren't optional.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
 def ensure_deps():
     missing = []
     try:
@@ -50,6 +58,37 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Cross-platform font helper
 # ---------------------------------------------------------------------------
+def fit_board(board, target_w: int, target_h: int, scroll_threshold: float = 0.25):
+    """Fit the board image to the frame. Returns (image, scrollable).
+
+    Scaling to frame width and scrolling vertically is only right when the board
+    is genuinely taller than the frame. Doing it unconditionally is what cut the
+    bottom tier off a 2450x1449 board: scaled to 1920 wide it comes to 1135 high,
+    just 55px over a 1080 frame — so the opening frame (scroll 0) silently lost
+    its last row, the closing frame lost the title bar, and the "scrolling
+    background" travelled 55px that nobody can see.
+
+    Worse in portrait: a wide board scaled to 1080 wide is ~638 high, and cropping
+    a 1920-high window out of it gives 1282px of pure black, because PIL's crop()
+    pads out-of-bounds regions instead of raising.
+
+    So: scroll only when scaling to width leaves the board meaningfully taller
+    than the frame (>25% by default). Otherwise contain it — whole board visible,
+    padded with the board's own background color so the seam doesn't show.
+    """
+    bw, bh = board.size
+    scaled_h = int(bh * target_w / bw)
+    if (scaled_h - target_h) / target_h > scroll_threshold:
+        return board.resize((target_w, scaled_h), Image.LANCZOS), True
+
+    scale = min(target_w / bw, target_h / bh)
+    fitted = board.resize((max(1, int(bw * scale)), max(1, int(bh * scale))), Image.LANCZOS)
+    pad_color = board.getpixel((2, 2))  # title-bar corner: blends with the board
+    canvas = Image.new("RGB", (target_w, target_h), pad_color)
+    canvas.paste(fitted, ((target_w - fitted.width) // 2, (target_h - fitted.height) // 2))
+    return canvas, False
+
+
 def get_font(size: int):
     system = platform.system()
     if system == "Windows":
@@ -196,6 +235,91 @@ def _srt_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
+def _has_cjk(text: str) -> bool:
+    return any("㐀" <= ch <= "鿿" or "぀" <= ch <= "ヿ"
+               or "가" <= ch <= "힯" for ch in text)
+
+
+def _split_text_for_cues(text: str):
+    """Break one narration block into reader-sized subtitle cues.
+
+    A whole intro used to go out as a single cue: 18.5 seconds, four sentences,
+    60+ characters. Players stack that across the screen and nobody can follow
+    it. Netflix-style limits: ~24 chars per cue for CJK (no spaces, denser
+    glyphs), ~42 for Latin.
+    """
+    import re
+    text = " ".join(text.split())
+    limit = 24 if _has_cjk(text) else 42
+    if len(text) <= limit:
+        return [text]
+
+    # Split after sentence-final punctuation, keeping the punctuation attached.
+    parts = [p.strip() for p in re.split(r"(?<=[。！？；!?;.])", text) if p.strip()]
+    joiner = "" if _has_cjk(text) else " "
+
+    merged, current = [], ""
+    for part in parts:
+        if not current:
+            current = part
+        elif len(current) + len(part) <= limit:
+            current = f"{current}{joiner}{part}"
+        else:
+            merged.append(current)
+            current = part
+    if current:
+        merged.append(current)
+
+    # A single sentence can still be over the limit — fall back to commas, then
+    # to a hard wrap, so no cue is ever wildly oversized.
+    cues = []
+    for cue in merged:
+        if len(cue) <= limit * 1.5:
+            cues.append(cue)
+            continue
+        chunks = [c.strip() for c in re.split(r"(?<=[，,、])", cue) if c.strip()]
+        buf = ""
+        for chunk in chunks:
+            if not buf:
+                buf = chunk
+            elif len(buf) + len(chunk) <= limit:
+                buf = f"{buf}{joiner}{chunk}"
+            else:
+                cues.append(buf)
+                buf = chunk
+        if buf:
+            cues.append(buf)
+    out = []
+    for cue in cues:
+        while len(cue) > limit * 1.8:
+            out.append(cue[:limit])
+            cue = cue[limit:]
+        out.append(cue)
+    return [c for c in out if c]
+
+
+def _emit_cues(lines: list, sub_idx: int, text: str, start: float, end: float) -> int:
+    """Append text as one or more cues spanning [start, end); return next index.
+
+    Time is shared out in proportion to cue length, so a long sentence holds the
+    screen longer than a short one and the block still ends exactly at `end`.
+    """
+    cues = _split_text_for_cues(text)
+    total = sum(len(c) for c in cues) or 1
+    span = max(0.0, end - start)
+    t = start
+    for i, cue in enumerate(cues):
+        # Last cue lands exactly on `end` — no rounding drift into the next block.
+        cue_end = end if i == len(cues) - 1 else t + span * len(cue) / total
+        lines.append(str(sub_idx))
+        lines.append(f"{_srt_time(t)} --> {_srt_time(cue_end)}")
+        lines.append(cue)
+        lines.append("")
+        sub_idx += 1
+        t = cue_end
+    return sub_idx
+
+
 def generate_srt(script: dict, audio_map: dict, work_dir: str,
                  intro_duration: float, gap_duration: float,
                  intro_dur_actual: float = None,
@@ -222,11 +346,7 @@ def generate_srt(script: dict, audio_map: dict, work_dir: str,
 
     intro_text = script.get("intro", "")
     if intro_text:
-        lines.append(str(sub_idx))
-        lines.append(f"{_srt_time(0)} --> {_srt_time(intro_real)}")
-        lines.append(intro_text)
-        lines.append("")
-        sub_idx += 1
+        sub_idx = _emit_cues(lines, sub_idx, intro_text, 0, intro_real)
 
     for seg in segments:
         idx = seg["index"]
@@ -253,19 +373,13 @@ def generate_srt(script: dict, audio_map: dict, work_dir: str,
                 dur = 5.0
         start = current_time
         end = current_time + dur
-        lines.append(str(sub_idx))
-        lines.append(f"{_srt_time(start)} --> {_srt_time(end)}")
-        lines.append(text)
-        lines.append("")
-        sub_idx += 1
+        sub_idx = _emit_cues(lines, sub_idx, text, start, end)
         current_time = end + gap_duration
 
     outro_text = script.get("outro", "")
     if outro_text:
-        lines.append(str(sub_idx))
-        lines.append(f"{_srt_time(current_time)} --> {_srt_time(current_time + outro_real)}")
-        lines.append(outro_text)
-        lines.append("")
+        sub_idx = _emit_cues(lines, sub_idx, outro_text,
+                             current_time, current_time + outro_real)
 
     with open(srt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -322,7 +436,8 @@ def _parse_resolution(resolution: str):
 # Main video generation
 # ---------------------------------------------------------------------------
 def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080",
-                   intro_duration: float = 3.0, gap_duration: float = 0.8):
+                   intro_duration: float = 3.0, gap_duration: float = 0.8,
+                   fps: int = 24, scroll_threshold: float = 0.25):
     from moviepy import ImageClip, AudioFileClip, concatenate_videoclips
 
     target_w, target_h = _parse_resolution(resolution)
@@ -366,19 +481,18 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     board_path = resolve_board_path(work_dir, manifest)
     board = Image.open(board_path).convert("RGB")
 
-    if board.width != target_w:
-        scale = target_w / board.width
-        new_h = int(board.height * scale)
-        board = board.resize((target_w, new_h), Image.LANCZOS)
+    board, scrollable = fit_board(board, target_w, target_h, scroll_threshold)
     board_w, board_h = board.size
     max_scroll = max(0, board_h - target_h)
-    print(f"Board: {board_w}x{board_h}, max scroll: {max_scroll}px")
+    print(f"Board: {board_w}x{board_h}, "
+          + (f"scroll {max_scroll}px" if scrollable else "contain (no scroll)"))
 
     title = manifest.get("title", "Tier List")
     seg_lookup = {s["index"]: s for s in script.get("segments", [])}
     scripted_indices = {s["index"] for s in script.get("segments", []) if s.get("index", -1) >= 0}
 
     clips_info = []
+    skipped = []
     img_dir = os.path.join(work_dir, "images")
 
     for tier in manifest.get("tiers", []):
@@ -387,10 +501,12 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
             if scripted_indices and idx not in scripted_indices:
                 continue
             img_file = card.get("image_file")
-            if not img_file:
-                continue
-            card_path = os.path.join(img_dir, img_file)
-            if not os.path.exists(card_path):
+            card_path = os.path.join(img_dir, img_file) if img_file else ""
+            if not img_file or not os.path.exists(card_path):
+                # Never skip silently. A board whose cards all lack images used to
+                # sail through here and produce an intro + outro and nothing in
+                # between, exit code 0 — a two-frame "video" that looks finished.
+                skipped.append((idx, str(card.get("image_url", ""))[:48]))
                 continue
             audio_path = audio_map.get(idx)
             # NOTE: do NOT probe audio duration here. The clip's real duration
@@ -400,6 +516,21 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
             # into the "Compositing N clips (Xs total)" log (C4). The clips_info
             # tuple carries (tier, card, audio_path) — no dur.
             clips_info.append((tier, card, audio_path))
+
+    if skipped:
+        print(f"  [WARN] {len(skipped)} card(s) have no image on disk and were "
+              f"skipped: {skipped[:5]}{' ...' if len(skipped) > 5 else ''}",
+              file=sys.stderr)
+    print(f"Cards: {len(clips_info)} with images"
+          + (f", {len(skipped)} skipped" if skipped else ""))
+    if not clips_info:
+        raise SystemExit(
+            "No card has a usable image — the video would be nothing but an intro "
+            "and an outro.\n"
+            "If this board uses TEXT cards (image_url starts with 'text:'), re-run "
+            "fetch_tierlist.py: it renders those locally. If they are image cards, "
+            "the downloads failed — check the network and images/."
+        )
 
     clips = []
 
@@ -511,10 +642,10 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
     print(f"Compositing {len(clips)} clips ({total_content_dur:.1f}s total)...")
     final = concatenate_videoclips(clips, method="compose")
 
-    print(f"Writing video to {output_path}...")
+    print(f"Writing video to {output_path} at {fps}fps...")
     final.write_videofile(
         output_path,
-        fps=24,
+        fps=fps,
         codec="libx264",
         audio_codec="aac",
         preset="medium",
@@ -531,6 +662,16 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", default=None, help="Output MP4 path")
     parser.add_argument("--resolution", default="1920x1080", help="WxH")
     parser.add_argument("--intro-duration", type=float, default=3.0)
+    parser.add_argument(
+        "--fps", type=int, default=24,
+        help="Frame rate (default 24). Every clip is a still image, so 23 of "
+             "every 24 frames are byte-identical re-renders — dropping to 12 "
+             "roughly halves render time with no visible difference.")
+    parser.add_argument(
+        "--scroll-threshold", type=float, default=0.25,
+        help="How much taller than the frame the board must be (as a fraction) "
+             "before scrolling it instead of fitting it whole. Default 0.25.")
     args = parser.parse_args()
     output = args.output or os.path.join(args.work_dir, "tierlist_video.mp4")
-    generate_video(args.work_dir, output, args.resolution, args.intro_duration)
+    generate_video(args.work_dir, output, args.resolution, args.intro_duration,
+                   fps=args.fps, scroll_threshold=args.scroll_threshold)

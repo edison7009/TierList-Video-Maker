@@ -38,6 +38,13 @@ import shutil
 import sys
 from difflib import SequenceMatcher
 
+if sys.platform == "win32":
+    # The Windows console defaults to the ANSI code page (GBK on zh-CN), which
+    # turns every CJK title, label and path in the log into unreadable bytes.
+    # This skill explicitly supports CJK boards, so readable logs are required.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 def _norm(label: str) -> str:
     """Normalize a label for comparison: lowercase, strip, drop punctuation/ws."""
@@ -211,7 +218,11 @@ def reconcile(work_dir: str) -> dict:
 
     # Detect duplicate tier names in the board (F4) — they'd silently merge
     # into one tier, losing the second tier's color/structure.
-    board_tier_names = [s["tier"] for s in board_slots]
+    # One name per TIER, not per card. board_slots is the per-card flattening, so
+    # reading tier names off it made any tier holding 2+ cards look duplicated —
+    # a false WARN on virtually every board. Warnings that cry wolf train people
+    # to ignore the real ones.
+    board_tier_names = [t.get("tier", "") for t in board.get("tiers", [])]
     if len(set(board_tier_names)) < len(board_tier_names):
         seen, dups = set(), set()
         for n in board_tier_names:

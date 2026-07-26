@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.3
+version: 1.0.4
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -33,12 +33,22 @@ first, then make the video." Do not try to make a video from an editor URL or a
 draft. `fetch_tierlist.py` checks the `status` field and will fail fast with this
 same message if the post isn't published.
 
-## ⚠️ Multimodal (image recognition) is required — be honest if you can't
+## ⚠️ Image-card boards need multimodal vision — text-card boards don't
 
-This skill needs **AI vision**: the TierVibe API returns no card text labels —
-card names are baked into the card images, so you (the model running this
-skill) must look at each card image and identify what it depicts before you
-can write any narration.
+**First check which kind of board this is — vision may not be needed at all.**
+After Step 2, look at any card's `image_url` in `manifest.json`:
+
+- **`text:...`** → a TEXT card. The label is right there in the data (TierVibe
+  encodes it as `text:<urlencoded label>#<fg>#<bg>`); `fetch_tierlist.py` has
+  already rendered the swatch and filled `label`, tagging it
+  `label_source: "text_card_data"`. **Skip the vision work in Steps 4 and 5** —
+  read the labels straight from `manifest.json`. A model with no image
+  recognition can complete a text board end to end.
+- **an `http(s)://` URL** → an IMAGE card. Everything below applies.
+
+For image cards this skill needs **AI vision**: the API returns no text labels —
+card names are baked into the images, so you (the model running this skill) must
+look at each card image and identify what it depicts before writing narration.
 
 **If you do NOT support image recognition** (you can't view/identify images),
 **stop at Step 4 and tell the user plainly** — do NOT fabricate card names or
@@ -91,9 +101,12 @@ python <skill_dir>/scripts/fetch_tierlist.py "<URL_OR_SLUG>" -o <work_dir>
 Downloads all card images + the 600px server thumb (fallback background), writes
 `manifest.json`. Verify: `total_cards > 0` and `images/` is populated.
 
-### Step 3 — (Optional) Render a fallback board
+### Step 3 — (Last resort) Render an approximate board
 
-Only if Step 1 failed AND you want a non-blurry background without Playwright:
+**Only when Playwright cannot be installed at all.** Step 1 is the real path and
+it works — `data-testid="tier-grid"` is live in production. This step produces a
+board that does NOT match TierVibe's layout, so reaching for it when Step 1 was
+merely not tried gives a visibly worse video:
 
 ```bash
 python <skill_dir>/scripts/render_board.py <work_dir> --width 1920
@@ -235,7 +248,7 @@ intro/outro are empty it warns loudly — fix `narration_script.json` and re-run
 ### Step 9 — Compose video
 
 ```bash
-python <skill_dir>/scripts/generate_video.py <work_dir> -o <output.mp4> [--resolution 1920x1080]
+python <skill_dir>/scripts/generate_video.py <work_dir> -o <output.mp4> [--resolution 1920x1080] [--fps 24] [--scroll-threshold 0.25]
 ```
 
 Options:
@@ -290,6 +303,23 @@ Cross-platform font detection in the render/compose scripts:
 ## Troubleshooting
 
 - **No card images**: the URL must be a published (not draft) post.
+- **The video is only an intro and an outro, nothing in between**: no card had an
+  image on disk. `generate_video.py` now refuses to write that video and says so.
+  Usually a TEXT-card board fetched before this was supported — re-run
+  `fetch_tierlist.py`, which renders `text:` cards locally. Check its summary
+  line: `Cards: N total — X downloaded, Y text cards rendered, Z FAILED`.
+- **The board is cut off at the bottom (or the title bar is cut off at the top)**:
+  older builds always scaled the board to frame width and cropped, so a board only
+  slightly taller than the frame silently lost its last tier row. `fit_board()`
+  now scrolls only when the board is >25% taller than the frame and otherwise
+  fits it whole. Tune with `--scroll-threshold`; the log says `contain (no
+  scroll)` or `scroll Npx`.
+- **Portrait (`--resolution 1080x1920`) is mostly black**: same root cause — a
+  wide board scaled to 1080 wide is far shorter than 1920, and PIL pads the
+  out-of-bounds crop with black. Fixed by the same `fit_board()`.
+- **Rendering takes far longer than the video is**: every clip is a still frame,
+  so most rendered frames are identical. `--fps 12` roughly halves the time with
+  no visible difference.
 - **`capture_board.py` says "tier-grid not found"**: the TierVibe deploy hasn't
   shipped the `data-testid="tier-grid"` attribute yet. Use the 600px thumb
   fallback (Step 2) and report it. Board-first recognition (Step 4) then has

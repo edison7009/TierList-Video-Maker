@@ -23,6 +23,126 @@ OG_URL = "https://tiervibe.com/og/{slug}.jpg"
 USER_AGENT = "TierListVideoMaker/1.0"
 IMG_TIMEOUT = 30
 
+# Text cards are rendered as square swatches at this size.
+TEXT_CARD_SIZE = 640
+TEXT_CARD_PAD = 56
+
+if sys.platform == "win32":
+    # The Windows console defaults to the ANSI code page (GBK on zh-CN), which
+    # turns every CJK title and label in the log into unreadable bytes. This
+    # skill explicitly supports CJK boards, so a readable log isn't optional.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _hex_rgb(value: str, fallback=(51, 51, 51)):
+    """'#e11d48' / 'e11d48' / 'fff' -> (r, g, b). Falls back on anything odd."""
+    v = (value or "").lstrip("#").strip()
+    if len(v) == 3:
+        v = "".join(c * 2 for c in v)
+    if len(v) not in (6, 8):
+        return fallback
+    try:
+        return tuple(int(v[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return fallback
+
+
+def _get_font(size: int):
+    """Same CJK-capable font search the render/compose scripts use."""
+    from PIL import ImageFont
+    if sys.platform == "win32":
+        candidates = [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhbd.ttc",
+                      r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\arial.ttf"]
+    elif sys.platform == "darwin":
+        candidates = ["/System/Library/Fonts/PingFang.ttc",
+                      "/System/Library/Fonts/Helvetica.ttc"]
+    else:
+        candidates = ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                      "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                      "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _wrap_label(draw, text: str, font, max_width: int):
+    """Wrap on spaces where possible, per-character for CJK (which has none)."""
+    if draw.textlength(text, font=font) <= max_width:
+        return [text]
+    lines, current = [], ""
+    tokens = text.split(" ") if " " in text else list(text)
+    joiner = " " if " " in text else ""
+    for tok in tokens:
+        trial = f"{current}{joiner}{tok}" if current else tok
+        if draw.textlength(trial, font=font) <= max_width or not current:
+            current = trial
+        else:
+            lines.append(current)
+            current = tok
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _parse_text_card(url: str):
+    """'text:<urlencoded label>#<fg>#<bg>' -> (label, fg_rgb, bg_rgb).
+
+    TierVibe encodes a text card's label and its two colors into the card's
+    stored imageUrl. Everything the video needs is right here in the data —
+    no vision pass required to know what this card says.
+    """
+    import urllib.parse
+    parts = url[len("text:"):].split("#")
+    label = urllib.parse.unquote(parts[0]).strip()
+    fg = parts[1] if len(parts) > 1 and parts[1] else "ffffff"
+    bg = parts[2] if len(parts) > 2 and parts[2] else "333333"
+    return label, _hex_rgb(fg, (255, 255, 255)), _hex_rgb(bg)
+
+
+def _render_text_card(label: str, fg, bg, path: str,
+                      size: int = TEXT_CARD_SIZE, pad: int = TEXT_CARD_PAD) -> bool:
+    """Draw a text card as the same colored square the board shows.
+
+    Shrinks the font until the wrapped label fits the square, so a long label
+    stays inside the card instead of overflowing it.
+    """
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        import subprocess
+        print("Installing Pillow (needed to render text cards)...", file=sys.stderr)
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "Pillow", "-q"])
+        except subprocess.CalledProcessError as e:
+            print(f"  [ERROR] cannot render text cards without Pillow ({e}). On "
+                  "Debian/Ubuntu or Homebrew Python this is usually PEP 668 — try "
+                  "`pip install --user Pillow` or a venv.", file=sys.stderr)
+            return False
+        from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (size, size), bg)
+    draw = ImageDraw.Draw(img)
+    avail = size - pad * 2
+    lines, font, line_h = [label], _get_font(96), 96
+    for font_size in range(96, 27, -4):
+        font = _get_font(font_size)
+        lines = _wrap_label(draw, label, font, avail)
+        line_h = int(font_size * 1.30)
+        if len(lines) * line_h <= avail:
+            break
+    y = (size - len(lines) * line_h) // 2
+    for line in lines:
+        x = (size - draw.textlength(line, font=font)) / 2
+        draw.text((x, y), line, font=font, fill=fg)
+        y += line_h
+    img.save(path, "PNG")
+    return True
+
 
 def extract_slug(url_or_id: str) -> str:
     """Extract the public slug from a tiervibe.com/t/<slug> URL, or accept it bare."""
@@ -144,6 +264,7 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     # 3. Parse tiers and download card images
     tiers = []
     card_index = 0
+    downloaded = rendered = failed = 0
     for i in range(1, 16):
         tier_name = data.get(f"T{i}name", "") or ""
         tier_color = data.get(f"T{i}color", "#333333")
@@ -159,17 +280,39 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
             img_url = img_obj.get("imageUrl", "") if isinstance(img_obj, dict) else ""
             if not img_url:
                 continue
-            ext = _ext_from_url(img_url, default=".webp")
-            filename = f"card_{card_index:03d}{ext}"
-            filepath = os.path.join(img_dir, filename)
-            print(f"  [{tier_name}] card {card_index}: {img_url}")
-            ok = download(img_url, filepath)
+            if img_url.startswith("text:"):
+                # Text card: the label and both colors live in the pseudo-URL, so
+                # we render the swatch locally instead of downloading anything —
+                # and we already KNOW what the card says, no vision pass needed.
+                label, fg, bg = _parse_text_card(img_url)
+                filename = f"card_{card_index:03d}.png"
+                filepath = os.path.join(img_dir, filename)
+                print(f"  [{tier_name}] card {card_index}: text card — {label}")
+                ok = _render_text_card(label, fg, bg, filepath)
+                if ok:
+                    rendered += 1
+                else:
+                    failed += 1
+                card_label, label_source = (label, "text_card_data") if ok else ("", "")
+            else:
+                ext = _ext_from_url(img_url, default=".webp")
+                filename = f"card_{card_index:03d}{ext}"
+                filepath = os.path.join(img_dir, filename)
+                print(f"  [{tier_name}] card {card_index}: {img_url}")
+                ok = download(img_url, filepath)
+                if ok:
+                    downloaded += 1
+                else:
+                    failed += 1
+                # Image cards carry no text in the API — a vision pass fills this.
+                card_label, label_source = "", "ai_vision"
             cards.append({
                 "index": card_index,
                 "image_file": filename if ok else None,
                 "image_url": img_url,
                 "card_id": img_obj.get("id", "") if isinstance(img_obj, dict) else "",
-                "label": "",  # filled by AI vision (API returns no text labels)
+                "label": card_label,
+                "label_source": label_source,
             })
             card_index += 1
 
@@ -198,7 +341,18 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     print(f"\nManifest saved: {manifest_path}")
-    print(f"Total cards downloaded: {card_index}")
+    # Report what actually happened, not just the card count. The old line said
+    # "Total cards downloaded: 27" even when all 27 failed and images/ was empty,
+    # which let a board with no usable card images look like a clean run.
+    print(f"Cards: {card_index} total — {downloaded} downloaded, "
+          f"{rendered} text cards rendered, {failed} FAILED")
+    if failed:
+        print(f"  [WARN] {failed} card(s) have no image on disk; the video will "
+              "skip them.", file=sys.stderr)
+    if card_index and not (downloaded + rendered):
+        print("  [ERROR] not a single card image was obtained — images/ is empty. "
+              "generate_video.py would produce an intro+outro and nothing else.",
+              file=sys.stderr)
     print(f"Board image source: {board_source} ({'ok' if board_ok else 'FAILED'})")
     return manifest
 
