@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.1
+version: 1.0.2
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -269,6 +269,12 @@ Provide the output video + subtitles file to the user.
 - `playwright` + Chromium (for the high-res board capture; auto-installed on
   first run of `capture_board.py`; first install downloads ~150MB browser)
 
+Everything above installs **once per Python environment, not once per run**: each
+script imports first and pip-installs only what's missing, and `capture_board.py`
+downloads Chromium only when it isn't already on disk. A second run — or a fresh
+session — reuses what's there. Switching interpreters (a different venv, another
+machine) means installing into that environment once.
+
 Cross-platform font detection in the render/compose scripts:
 - Windows: Microsoft YaHei (msyh.ttc)
 - macOS: PingFang SC
@@ -288,6 +294,10 @@ Cross-platform font detection in the render/compose scripts:
   shipped the `data-testid="tier-grid"` attribute yet. Use the 600px thumb
   fallback (Step 2) and report it. Board-first recognition (Step 4) then has
   no board to read — fall back to per-card-only (Step 5).
+- **`pip install` fails with "externally-managed-environment"**: PEP 668, on
+  Debian/Ubuntu system Python or Homebrew Python. The auto-install can't write to
+  that interpreter. Re-run the same command with `pip install --user <pkg>`, or
+  create a venv (`python -m venv .venv` + activate) and run the scripts from it.
 - **TTS fails**: needs network; edge-tts uses Microsoft's online service.
 - **Video encoding fails**: moviepy bundles ffmpeg; if issues, install ffmpeg.
 - **Font missing**: scripts fall back to a default font; install Noto Sans CJK on Linux.

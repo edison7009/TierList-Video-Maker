@@ -41,18 +41,64 @@ def extract_slug(url_or_id: str) -> str:
     raise ValueError(f"Cannot extract slug from: {url_or_id}")
 
 
+CHROMIUM_INSTALL_TIMEOUT = 900  # 15 min — a cold ~150MB download on a slow link
+
+
+def _chromium_installed() -> bool:
+    """True when a Chromium build is already on disk for this playwright version.
+
+    Reads the registry path instead of launching, so the check costs no network
+    and no browser start-up.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            path = p.chromium.executable_path
+        return bool(path) and os.path.exists(path)
+    except Exception:
+        return False
+
+
 def _ensure_playwright():
+    """Make sure playwright and a Chromium build are available.
+
+    Both halves are guarded. `playwright install chromium` is idempotent but not
+    free: it spawns a subprocess and hits the network for a version check every
+    time. Running it unconditionally meant a machine that already had a perfectly
+    usable browser still aborted the capture on any transient proxy/network
+    hiccup — so it now runs only when Chromium is actually absent.
+    """
+    import subprocess
     try:
         from playwright.sync_api import sync_playwright  # noqa: F401
     except ImportError:
-        import subprocess
         print("Installing playwright...", file=sys.stderr)
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright", "-q"])
-    import subprocess
-    result = subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        capture_output=True, text=True,
-    )
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright", "-q"])
+        except subprocess.CalledProcessError as e:
+            raise SystemExit(
+                f"Failed to install the playwright package ({e}). On Debian/Ubuntu or "
+                "Homebrew Python this is usually PEP 668 ('externally-managed-environment') "
+                "— retry with `pip install --user playwright`, or run inside a venv. "
+                "High-res capture aborted — the video falls back to the 600px thumb "
+                "from Step 2 (fetch_tierlist.py)."
+            )
+
+    if _chromium_installed():
+        return
+
+    print("Downloading Chromium (first run only, ~150MB)...", file=sys.stderr)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            capture_output=True, text=True, timeout=CHROMIUM_INSTALL_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            f"Chromium download timed out after {CHROMIUM_INSTALL_TIMEOUT}s "
+            "(check network/proxy). High-res capture aborted — the video falls "
+            "back to the 600px thumb from Step 2 (fetch_tierlist.py)."
+        )
     if result.returncode != 0:
         raise SystemExit(
             "Failed to install Playwright Chromium (check network/proxy/disk). "
