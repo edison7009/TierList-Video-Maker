@@ -151,69 +151,93 @@ async function captureBoard(pixelRatio, title, logoDataUri) {
   const boardImg = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = boardDataUrl; });
 
   const scale = pixelRatio;
-  const headerH = Math.max(96 * scale, boardImg.width * 0.10);
+  // Mirror SaveImage.saveImage / drawHeader: a FIXED-height brand bar (not
+  // width-proportional). The old code sized the header as 10% of board width,
+  // which on wide boards blew up the logo + "TierVibe" wordmark and squeezed
+  // the title into an ugly mid-word 2-line wrap. Fixed sizes match the in-page
+  // download button exactly at any board width.
+  const headerH = 60 * scale;
   const canvasW = boardImg.width;
   const canvasH = boardImg.height + headerH;
   const canvas = document.createElement('canvas');
   canvas.width = canvasW; canvas.height = canvasH;
   const ctx = canvas.getContext('2d');
-  // Dark header band + the board beneath it.
-  ctx.fillStyle = '#111111';
-  ctx.fillRect(0, 0, canvasW, headerH);
-  ctx.drawImage(boardImg, 0, headerH);
 
-  const pad = 20 * scale;
-  const logoSize = headerH * 0.6;
-  const spacing = 12 * scale;
-  const wmSize = headerH * 0.42;
-  ctx.font = `bold ${wmSize}px Arial, sans-serif`;
-  const tierW = ctx.measureText('Tier').width;
-  ctx.font = `400 ${wmSize}px Arial, sans-serif`;
-  const vibeW = ctx.measureText('Vibe').width;
-  const siteW = tierW + vibeW;
-  const rightX = canvasW - pad;
-
-  // Title (left, white bold). Wrap to TWO lines if it overflows; ellipsize line 2.
-  const titleSize = Math.max(28 * scale, headerH * 0.32);
-  const titleFont = `bold ${titleSize}px Arial, sans-serif`;
-  ctx.font = titleFont;
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  const availW = Math.max(60 * scale, canvasW - pad - pad - logoSize - spacing - siteW);
-  const t = title || '';
-  if (ctx.measureText(t).width <= availW) {
-    // Fits one line — keep it centered.
-    ctx.fillText(t, pad, headerH / 2 + 3 * scale);
-  } else {
-    // Two-line wrap by character (CJK-safe, no word boundary assumption).
-    let line1 = '', line2 = '';
-    for (const ch of t) {
-      if (ctx.measureText(line1 + ch).width <= availW) line1 += ch;
-      else if (ctx.measureText(line2 + ch).width <= availW) line2 += ch;
-      else break;
+  // Word-boundary wrap (port of SaveImage.wrapTitle): spaces first, only
+  // char-break a token that is itself wider than the line (long CJK runs).
+  function wrapTitle(text, maxWidth) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      if (ctx.measureText(word).width > maxWidth) {
+        if (line) { lines.push(line); line = ''; }
+        let chunk = '';
+        for (const ch of Array.from(word)) {
+          if (ctx.measureText(chunk + ch).width <= maxWidth) chunk += ch;
+          else { lines.push(chunk); chunk = ch; }
+        }
+        line = chunk;
+        continue;
+      }
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width <= maxWidth) line = test;
+      else { lines.push(line); line = word; }
     }
-    const remaining = t.slice(line1.length + line2.length);
-    if (remaining) {
-      while (line2.length > 0 && ctx.measureText(line2 + '…').width > availW) line2 = line2.slice(0, -1);
-      line2 += '…';
-    }
-    const lineGap = titleSize * 1.2;
-    ctx.fillText(line1, pad, headerH / 2 - lineGap / 2 + 3 * scale);
-    if (line2) ctx.fillText(line2, pad, headerH / 2 + lineGap / 2 + 3 * scale);
+    if (line) lines.push(line);
+    return lines;
   }
 
-  // Wordmark (right): "Vibe" grey, "Tier" white bold just before it.
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = `400 ${wmSize}px Arial, sans-serif`;
-  ctx.textAlign = 'right';
-  ctx.fillText('Vibe', rightX, headerH / 2 + 3 * scale);
-  ctx.fillStyle = '#ffffff';
-  ctx.font = `bold ${wmSize}px Arial, sans-serif`;
-  ctx.textAlign = 'right';
-  ctx.fillText('Tier', rightX - vibeW - 0.4, headerH / 2 + 3 * scale);
+  // Dark header band (same color as the download export).
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, canvasW, headerH);
 
-  // Logo (right of wordmark's left edge).
+  // Right side: wordmark widths also bound the title's available width.
+  const rightX = canvasW - 20 * scale;
+  const logoSize = 40 * scale;
+  const spacing = 12 * scale;
+  ctx.font = `bold ${40 * scale}px Inter, Arial, sans-serif`;
+  const tierW = ctx.measureText('Tier').width;
+  ctx.font = `400 ${40 * scale}px Inter, Arial, sans-serif`;
+  const vibeW = ctx.measureText('Vibe').width;
+  const siteW = tierW + vibeW + 0.4;
+  const titleX = 20 * scale;
+  const availW = Math.max(canvasW - titleX - 20 * scale - logoSize - spacing - siteW, 60 * scale);
+  const textY = headerH / 2 + 3 * scale;
+
+  // Title (left): one line at 32 if it fits, else shrink to 24, else word-wrap
+  // to at most two lines (ellipsize the rest). Never char-breaks Latin words.
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const t = title || '';
+  if (t) {
+    const baseFont = 32 * scale;
+    const twoLineFont = 24 * scale;
+    ctx.font = `bold ${baseFont}px Arial, sans-serif`;
+    if (ctx.measureText(t).width <= availW) {
+      ctx.fillText(t, titleX, textY);
+    } else {
+      ctx.font = `bold ${twoLineFont}px Arial, sans-serif`;
+      if (ctx.measureText(t).width <= availW) {
+        ctx.fillText(t, titleX, headerH / 2 + 2 * scale);
+      } else {
+        const lines = wrapTitle(t, availW);
+        if (lines.length > 2) {
+          let second = lines[1];
+          while (second.length > 0 && ctx.measureText(second + '\u2026').width > availW) second = second.slice(0, -1);
+          lines.length = 2;
+          lines[1] = second + '\u2026';
+        }
+        const lineGap = twoLineFont * 1.2;
+        const midY = headerH / 2;
+        ctx.fillText(lines[0], titleX, midY - lineGap / 2);
+        if (lines.length > 1) ctx.fillText(lines[1], titleX, midY + lineGap / 2);
+      }
+    }
+  }
+
+  // Logo (left of the wordmark), same size as the download export.
   if (logoDataUri) {
     try {
       const logo = await new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = logoDataUri; });
@@ -224,6 +248,26 @@ async function captureBoard(pixelRatio, title, logoDataUri) {
       }
     } catch (e) {}
   }
+
+  // Wordmark: "Vibe" grey, "Tier" white bold.
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = `400 ${40 * scale}px Inter, Arial, sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.fillText('Vibe', rightX, textY);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${40 * scale}px Inter, Arial, sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.fillText('Tier', rightX - vibeW - 0.4, textY);
+
+  // Separator line + the board beneath (matches the download export).
+  ctx.strokeStyle = '#333333';
+  ctx.lineWidth = 1 * scale;
+  ctx.beginPath();
+  ctx.moveTo(0, headerH);
+  ctx.lineTo(canvasW, headerH);
+  ctx.stroke();
+  ctx.drawImage(boardImg, 0, headerH);
   return canvas.toDataURL('image/png');
 }
 """
