@@ -31,9 +31,10 @@ GET https://tiervibe.com/api/posts/{slugOrNumericId}
 | `status` | string | `published` or `draft` |
 | `T{n}name` | string | Tier n label (n = 1..15) |
 | `T{n}color` | string | Tier n title-bar hex color |
-| `T{n}images` | array | Cards in tier n: `[{id, imageUrl}]` |
+| `T{n}images` | array | Cards in tier n: `[{id, imageUrl, detail}]` (see §3) |
 | `T{n}size` | string | Tier n font size |
 | `C{n}images` | array | Candidate-pool cards (n = 1..3) |
+| `cardDetails` | array | All card details: `[{id, content}]` - duplicates each card's `detail`; cross-check source |
 
 ## 2. The board image — THIS is your video background
 
@@ -93,15 +94,26 @@ stalled. **Do not.** Just `GET` the image URL from the priority chain above.
 ## 3. Card images
 
 ```json
-{ "id": "8962089c-...", "imageUrl": "https://cdn.tiervibe.com/cardimage/2026/07/23/occ2ab5pfbk.webp" }
+{
+  "id": "8962089c-...",
+  "imageUrl": "https://cdn.tiervibe.com/cardimage/2026/07/23/occ2ab5pfbk.webp",
+  "detail": "## T1\nAuthor's markdown explanation for this card (optional, may be empty)"
+}
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Card uuid |
+| `imageUrl` | string | Card image URL (or `text:<urlencoded label>#<fg>#<bg>` for text cards) |
+| `detail` | string\|null | Author's markdown explanation for this card, **optional** - used as narration reference. Empty/null on cards the author didn't annotate. Mirrored in top-level `cardDetails[].content`. |
 
 - Card images live on `cdn.tiervibe.com`. Downloading them server-side with a
   normal HTTP client works (CORS is a browser-only restriction; a Python
   `requests`/`urllib` fetch is unaffected).
 - **The API does NOT return card text labels.** Card names are baked into the
   card images. To narrate a card, identify it with AI vision on the downloaded
-  image file.
+  image file. `detail` is the author's written explanation (reference for
+  narration), NOT the card name - don't confuse the two.
 
 ## 4. URL formats
 

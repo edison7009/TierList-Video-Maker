@@ -51,7 +51,7 @@ def ensure_deps():
 
 ensure_deps()
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 
@@ -576,8 +576,11 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
             scroll_progress = gap_progress = 0.0
         scroll_y = int(scroll_progress * max_scroll)
 
+        # Full-vivid board, NO blur/darken: the colorful board IS the attraction
+        # while a card is narrated - blurring it left a dead mid-frame with no pull
+        # (user feedback). The card's own dark backing in create_card_overlay keeps
+        # it readable against the bright background.
         bg_frame = crop_board_at(board, scroll_y, target_w, target_h)
-        bg_frame = darken(bg_frame, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
 
         card_path = os.path.join(img_dir, card["image_file"])
         card_img = Image.open(card_path).convert("RGB")
@@ -604,16 +607,16 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         clips.append(clip)
 
         gap_scroll = int(gap_progress * max_scroll)
+        # Same full-vivid board as the card frame (no blur/darken) so the gap
+        # doesn't flicker bright<->dim between cards.
         gap_bg = crop_board_at(board, gap_scroll, target_w, target_h)
-        gap_bg = darken(gap_bg, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
         clips.append(ImageClip(np.array(gap_bg), duration=gap_duration))
 
         elapsed += real_dur + gap_duration
 
-    # Outro: NO title frame (don't repeat the title). Plain darkened+blurred
-    # background scrolled to the end + the outro audio (user feedback).
+    # Outro: NO title frame (don't repeat the title). Full-vivid board scrolled
+    # to the end (no blur/darken, matching intro + card frames) + outro audio.
     outro_frame = crop_board_at(board, max_scroll, target_w, target_h)
-    outro_frame = darken(outro_frame, 0.55).filter(ImageFilter.GaussianBlur(radius=12))
     outro_dur = intro_duration
     outro_audio_clip = None
     if outro_audio and os.path.exists(outro_audio):

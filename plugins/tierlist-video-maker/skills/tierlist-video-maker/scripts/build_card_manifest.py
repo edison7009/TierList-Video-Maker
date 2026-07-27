@@ -69,26 +69,30 @@ def build(work_dir: str) -> str:
             if disagree:
                 # Show BOTH labels so the reviewer can pick: board (context)
                 # vs per-card (higher-res individual image). Escape the literal
-                # separator pipes so the markdown row stays 6 columns (F3 —
-                # an unescaped " | " split the row into 7 cells vs the 6-col
+                # separator pipes so the markdown row stays 7 columns (F3 —
+                # an unescaped " | " split the row into 8 cells vs the 7-col
                 # header, corrupting exactly the disagreement rows).
                 label = f"⚠ board={board_label} \\| card={card_label_raw}"
             elif matched is False:
                 flag = " ⚠unmatched"
                 label = label.replace("|", "\\|")
 
+            # author detail? column: shows which cards carry the author's own
+            # explanation, so at review the user can see whether the narration
+            # actually reflected it (vs generic model filler).
+            has_detail = "✓" if (card.get("detail") or "").strip() else ""
             tier_name_clean = tier_name.replace("|", "\\|")
-            rows.append((idx, img, tier_name_clean, board_pos_s, label, narration + flag))
+            rows.append((idx, img, tier_name_clean, board_pos_s, label, has_detail, narration + flag))
 
     lines = [f"# {title}", ""]
     if source_url:
         lines.append(f"Source: {source_url}")
         lines.append("")
     lines += [f"Total cards: {len(rows)}", "",
-              "| index | image file | tier | board_pos | card name | narration (preview) |",
-              "|---|---|---|---|---|---|"]
-    for idx, img, tier_name, board_pos_s, label, narration in rows:
-        lines.append(f"| {idx} | {img} | {tier_name} | {board_pos_s} | {label} | {narration} |")
+              "| index | image file | tier | board_pos | card name | detail? | narration (preview) |",
+              "|---|---|---|---|---|---|---|"]
+    for idx, img, tier_name, board_pos_s, label, has_detail, narration in rows:
+        lines.append(f"| {idx} | {img} | {tier_name} | {board_pos_s} | {label} | {has_detail} | {narration} |")
 
     out_path = os.path.join(work_dir, "card_manifest.md")
     with open(out_path, "w", encoding="utf-8") as f:

@@ -264,7 +264,7 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     # 3. Parse tiers and download card images
     tiers = []
     card_index = 0
-    downloaded = rendered = failed = 0
+    downloaded = rendered = failed = with_detail = 0
     for i in range(1, 16):
         tier_name = data.get(f"T{i}name", "") or ""
         tier_color = data.get(f"T{i}color", "#333333")
@@ -306,6 +306,14 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
                     failed += 1
                 # Image cards carry no text in the API — a vision pass fills this.
                 card_label, label_source = "", "ai_vision"
+            # Preserve the author's per-card explanation (`detail`). The API
+            # returns it on the card object; narration (Step 6) uses it as
+            # reference material so the video reflects the author's reasoning
+            # instead of generic model knowledge. May be empty - not every card
+            # has one. See references/tiervibe-api.md §3.
+            detail_text = (img_obj.get("detail") or "") if isinstance(img_obj, dict) else ""
+            if detail_text.strip():
+                with_detail += 1
             cards.append({
                 "index": card_index,
                 "image_file": filename if ok else None,
@@ -313,6 +321,7 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
                 "card_id": img_obj.get("id", "") if isinstance(img_obj, dict) else "",
                 "label": card_label,
                 "label_source": label_source,
+                "detail": detail_text,
             })
             card_index += 1
 
@@ -324,6 +333,15 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
                 "cards": cards,
             })
 
+    # Top-level cardDetails ([{id, content}]) - the author's per-card
+    # explanations, duplicated from each card's `detail`. Kept whole as a
+    # cross-check source; the per-card `detail` field is what narration reads.
+    raw_card_details = data.get("cardDetails") or []
+    card_details = [
+        {"id": cd.get("id", ""), "content": cd.get("content") or ""}
+        for cd in raw_card_details if isinstance(cd, dict)
+    ]
+
     manifest = {
         "public_id": slug,
         "title": title,
@@ -334,6 +352,7 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
         "board_image_url": board_url,
         "board_image_source": board_source,
         "tiers": tiers,
+        "card_details": card_details,
         "source_url": f"https://tiervibe.com/t/{slug}",
     }
 
@@ -345,7 +364,7 @@ def fetch_tierlist(url_or_id: str, out_dir: str) -> dict:
     # "Total cards downloaded: 27" even when all 27 failed and images/ was empty,
     # which let a board with no usable card images look like a clean run.
     print(f"Cards: {card_index} total — {downloaded} downloaded, "
-          f"{rendered} text cards rendered, {failed} FAILED")
+          f"{rendered} text cards rendered, {failed} FAILED, {with_detail} with detail")
     if failed:
         print(f"  [WARN] {failed} card(s) have no image on disk; the video will "
               "skip them.", file=sys.stderr)

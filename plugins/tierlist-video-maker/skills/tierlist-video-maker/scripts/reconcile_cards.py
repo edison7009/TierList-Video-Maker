@@ -74,6 +74,24 @@ def _fuzzy_ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
 
 
+def _assert_detail_preserved(manifest: dict, new_manifest: dict, path: str) -> None:
+    """Warn if reconcile dropped any author `detail` text.
+
+    The rebuild copies `detail` through explicitly; this catches a future
+    regression that silently strips the narration's reference material. A warn
+    (not a hard assert) so a partial drop still yields a usable manifest for
+    manual recovery.
+    """
+    orig = sum(1 for t in manifest.get("tiers", [])
+               for c in t.get("cards", []) if (c.get("detail") or "").strip())
+    new = sum(1 for t in new_manifest.get("tiers", [])
+              for c in t.get("cards", []) if (c.get("detail") or "").strip())
+    if new < orig:
+        print(f"  [WARN] author `detail` dropped in reconcile ({path}): "
+              f"{orig} -> {new} cards with detail. `detail` must pass through "
+              f"every rebuild path - check reconcile_cards.py.", file=sys.stderr)
+
+
 def _flatten_board(board: dict):
     """[(tier, position, label)] in visual reading order (top tier -> bottom, L->R)."""
     out = []
@@ -99,6 +117,7 @@ def _flatten_manifest(manifest: dict):
                 "image_file": card.get("image_file"),
                 "image_url": card.get("image_url"),
                 "card_id": card.get("card_id", ""),
+                "detail": card.get("detail", ""),
                 "label": (card.get("label") or "").strip(),
                 # "text_card_data" means the label came from the card's own data,
                 # not from reading an image — see _label_wins_over_board().
@@ -315,6 +334,7 @@ def reconcile(work_dir: str) -> dict:
               f"Board tags attached where matched. Manual review required.",
               file=sys.stderr)
         new_manifest = _attach_metadata_keep_api_order(manifest, pairs)
+        _assert_detail_preserved(manifest, new_manifest, "fallback")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(new_manifest, f, ensure_ascii=False, indent=2)
         print(f"Manifest updated (API order kept): {manifest_path} (backup: {bak})")
@@ -356,6 +376,7 @@ def reconcile(work_dir: str) -> dict:
                 "image_file": mc["image_file"],
                 "image_url": mc["image_url"],
                 "card_id": mc["card_id"],
+                "detail": mc.get("detail", ""),
                 "label": final_label,
                 "label_source": mc.get("label_source", ""),
                 "board_tier": slot["tier"],
@@ -382,6 +403,7 @@ def reconcile(work_dir: str) -> dict:
                 "image_file": mc["image_file"],
                 "image_url": mc["image_url"],
                 "card_id": mc["card_id"],
+                "detail": mc.get("detail", ""),
                 "label": mc["label"],
                 "label_source": mc.get("label_source", ""),
                 "board_tier": None,
@@ -425,6 +447,8 @@ def reconcile(work_dir: str) -> dict:
               f"— board label used, EXCEPT on text cards where the label comes "
               f"from the card's own data and wins. Rows flagged in "
               f"card_manifest.md.", file=sys.stderr)
+
+    _assert_detail_preserved(manifest, new_manifest, "reorder")
 
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(new_manifest, f, ensure_ascii=False, indent=2)

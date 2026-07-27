@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.5
+version: 1.0.6
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -198,6 +198,14 @@ Rules:
 - Match the language of the tier list title (Chinese title → Chinese narration).
 - Each segment: 1-3 sentences, concise and engaging.
 - Group by tier: introduce each tier before its cards.
+- **Use the author's `detail` as reference when present.** Each card in
+  `manifest.json` may carry a non-empty `detail` - the original author's own
+  explanation for why that card sits in that tier. If present, ground the
+  narration in it: prefer the facts/reasons/viewpoints the author wrote,
+  compressed into spoken-language sentences. If `detail` is empty, fall back to
+  a neutral explanation from the card label + tier. This is **reference, not
+  verbatim copy**: compress and make it conversational, but do NOT add facts
+  the author didn't state or contradict their assessment.
 - `index` must match the card index in `manifest.json` (unchanged by reconcile).
 - **`intro` and `outro` are REQUIRED and must be non-empty.** If either is
   empty, the video's opening/closing title frame will be SILENT (no voiceover)
@@ -218,15 +226,15 @@ Reads `manifest.json` (file + tier + board_position + board vs card label) +
 `narration_script.json` (label + narration), writes `card_manifest.md` — one
 row per card:
 
-| index | image file | tier | board_pos | card name | narration (preview) |
-|---|---|---|---|---|---|
-| 0 | card_000.webp | 夯 | 1 | 哪吒之魔童降世 | 第一名,哪吒之魔童降世。这部电影... |
+| index | image file | tier | board_pos | card name | detail? | narration (preview) |
+|---|---|---|---|---|---|---|
+| 0 | card_000.webp | 夯 | 1 | 哪吒之魔童降世 | ✓ | 第一名,哪吒之魔童降世。这部电影... |
 
 Rows where the board recognition and per-card recognition disagreed are shown
 as `⚠ board=<x> | card=<y>` so you can resolve them. Show this table to the
 user in Step 7 review — it's the single source of truth for "which file is
 which card". If a row is wrong, fix it in `manifest.json` (label) or
-`narration_script.json` (narration) and re-run this script.
+`narration_script.json` (narration) and re-run this script. The `detail?` column marks cards carrying an author `detail` explanation - at review, check those narrations actually reflect it instead of generic filler.
 
 ### Step 7 — User review
 
@@ -265,6 +273,9 @@ Features:
   `board.png` (Step 3).
 - Card order follows the reconciled `manifest.json` (board visual order).
 - Scrolling background: if the board is taller than the frame, scrolls top→bottom.
+- Vivid board background: the board stays full-color and SHARP during card
+  narration - NEVER blur or darken it. The colorful board is the attraction; the
+  card's own dark backing keeps it readable. (A blurred mid-frame had no pull.)
 - Card overlay: each card zoomed to center with a tier badge + label.
 - Subtitles: auto-generates `subtitles.srt` alongside the video, timed to the
   ACTUAL audio durations (intro/outro/segments) — not a fixed 3.0s guess.
