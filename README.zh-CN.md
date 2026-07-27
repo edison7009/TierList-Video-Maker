@@ -4,6 +4,28 @@
 
 > 一个堪比「印钞机」的生成视频 skill —— 一键全自动把 TierVibe 榜单做成带讲解的视频，而且每个环节都比同类生成器更硬核。
 
+## 快速展示
+
+**1. 制作帖子。** 给 AI 工具安装 **TierList-Maker** 后，在 AI 工具中输入：
+
+```
+/tierlist-maker 帮我制作一个美国最受欢迎体育TierList，要有详细解说。
+```
+
+成果：https://tiervibe.com/t/ZY70IpV0K8　（英文版展示：https://tiervibe.com/t/UxDgrOcQxd）
+
+---
+
+**2. 生成视频。** 给 AI 工具安装 **TierList-Video-Maker** 后，在 AI 工具中输入：
+
+```
+/tierlist-video-maker 把 https://tiervibe.com/t/ZY70IpV0K8 制作成视频
+```
+
+（英文版：把 https://tiervibe.com/t/UxDgrOcQxd 制作成视频）
+
+视频展示：https://www.bilibili.com/video/BV1LG3F6sEAB （英文版：https://youtu.be/ANjyhxRrH9U）
+
 ## 为什么 TierList 视频值得做
 
 TierList 类型的视频自带**深度和话题度**——谁排第几、谁被拉黑、谁该进 S 级，天然就是争议和谈资。这类内容在几乎所有视频平台都**很容易爆**，帮你拿到大量播放，进而带粉、带货、带流量。

@@ -4,6 +4,28 @@
 
 > 中文（简）见 [README.zh-CN.md](README.zh-CN.md). 繁中見 [README.zh-Hant.md](README.zh-Hant.md).
 
+## Quick demo
+
+**1. Make the tier list.** With **TierList-Maker** installed in your AI tool, enter:
+
+```
+/tierlist-maker Make a tier list of America's most popular sports, with detailed commentary.
+```
+
+Result: https://tiervibe.com/t/UxDgrOcQxd （中文版：https://tiervibe.com/t/ZY70IpV0K8）
+
+---
+
+**2. Make the video.** With **TierList-Video-Maker** installed in your AI tool, enter:
+
+```
+/tierlist-video-maker Turn https://tiervibe.com/t/UxDgrOcQxd into a video
+```
+
+（中文版：`/tierlist-video-maker 把 https://tiervibe.com/t/ZY70IpV0K8 制作成视频`）
+
+Video showcase: https://youtu.be/ANjyhxRrH9U （中文版：https://www.bilibili.com/video/BV1LG3F6sEAB）
+
 ## Why TierList videos are worth making
 
 TierList videos carry **depth and a point of view** — who's S-tier, who's trashed, who got snubbed — which is inherently controversial and shareable. On nearly every video platform this format **routinely pops off**, earning plays, followers, and a real path to monetization.
