@@ -12,7 +12,9 @@
 /tierlist-maker 幫我製作一個美國最受歡迎體育TierList，要有詳細解說。
 ```
 
-成果：https://tiervibe.com/t/ZY70IpV0K8　（英文版展示：https://tiervibe.com/t/UxDgrOcQxd）
+成果：
+- 中文版：<https://tiervibe.com/t/ZY70IpV0K8>
+- 英文版：<https://tiervibe.com/t/UxDgrOcQxd>
 
 ---
 
@@ -22,9 +24,11 @@
 /tierlist-video-maker 把 https://tiervibe.com/t/ZY70IpV0K8 製作成影片
 ```
 
-（英文版：把 https://tiervibe.com/t/UxDgrOcQxd 製作成影片）
+（英文版：把 <https://tiervibe.com/t/UxDgrOcQxd> 製作成影片）
 
-影片展示：https://www.bilibili.com/video/BV1LG3F6sEAB （英文版：https://youtu.be/ANjyhxRrH9U）
+影片展示：
+- 中文版（B 站）：<https://www.bilibili.com/video/BV1LG3F6sEAB>
+- 英文版（YouTube）：<https://youtu.be/ANjyhxRrH9U>
 
 ## 為什麼 TierList 影片值得做
 
