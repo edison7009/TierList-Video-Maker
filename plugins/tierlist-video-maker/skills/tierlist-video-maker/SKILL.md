@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.7
+version: 1.0.8
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -36,7 +36,7 @@ same message if the post isn't published.
 ## ⚠️ Image-card boards need multimodal vision — text-card boards don't
 
 **First check which kind of board this is — vision may not be needed at all.**
-After Step 2, look at any card's `image_url` in `manifest.json`:
+After Step 2, look at each card's `image_url` and `detail` in `manifest.json`:
 
 - **`text:...`** → a TEXT card. The label is right there in the data (TierVibe
   encodes it as `text:<urlencoded label>#<fg>#<bg>`); `fetch_tierlist.py` has
@@ -44,23 +44,20 @@ After Step 2, look at any card's `image_url` in `manifest.json`:
   `label_source: "text_card_data"`. **Skip the vision work in Steps 4 and 5** —
   read the labels straight from `manifest.json`. A model with no image
   recognition can complete a text board end to end.
-- **an `http(s)://` URL** → an IMAGE card. Everything below applies.
+- **an `http(s)://` URL** means an IMAGE card. Whether vision is needed depends on that card's `detail`:
 
-For image cards this skill needs **AI vision**: the API returns no text labels —
-card names are baked into the images, so you (the model running this skill) must
-look at each card image and identify what it depicts before writing narration.
+  - **Image card WITH a non-empty `detail`** - vision-free. The author's commentary names or clearly references the item, so you can DERIVE a short card label from the `detail` text (e.g. its first markdown heading, or the subject of the first sentence) without looking at the image. Write that label into the card's `label` field with `label_source: "derived_from_detail"`, then skip the vision work in Steps 4 and 5 and go straight to Step 6. A model with no image recognition can complete these cards end to end, just like text cards.
+  - **Image card WITHOUT `detail`** - vision IS needed. The API returns no text label for image cards, so the only way to know what the card depicts is to look at it. Everything below applies to these cards only.
 
-**If you do NOT support image recognition** (you can't view/identify images),
-**stop at Step 4 and tell the user plainly** — do NOT fabricate card names or
-hallucinate narration. Say, in the user's language:
+If the board mixes the two, handle each card by its own case: derive labels from `detail` where present, and use vision only for the no-detail image cards.
 
-> "I can't make this video — I can't recognize the card images. Use a
-> multimodal model that supports image recognition (e.g. GPT-4o, Claude with
-> vision, Gemini), or tell me what each card is and I'll take it from there."
+For no-detail image cards this skill needs **AI vision**: the API returns no text labels, so card names are baked into the images and you (the model running this skill) must look at each such card image and identify what it depicts before writing narration.
 
-Image recognition is the model's own capability, not something this skill can
-work around — same principle as image search in the TierList-Maker skill. Be
-honest; do not pretend.
+**If you do NOT support image recognition** (you can't view/identify images) AND there are no-detail image cards you can't otherwise name, **stop at Step 4 and tell the user plainly** - do NOT fabricate card names or hallucinate narration. Say, in the user's language:
+
+> "I can't make this video - some card images have no `detail` and I can't recognize images. Either: (1) use a multimodal model that supports image recognition (e.g. GPT-4o, Claude with vision, Gemini), (2) add a `detail` (讲解) explanation to those cards in the TierVibe post and re-run, or (3) tell me what each of those cards is and I'll take it from there."
+
+Image recognition is the model's own capability, not something this skill can work around - same principle as image search in the TierList-Maker skill. Be honest; do not pretend. But remember: a card with `detail` never needs vision - derive its label from the text.
 
 ## How the board image is obtained (read this first)
 
@@ -116,6 +113,8 @@ Builds an APPROXIMATE board (tier labels + card grid) from card images. It will
 not match TierVibe's exact layout, so prefer Step 1.
 
 ### Step 4 — Board-first recognition (produce board_layout.json)
+
+**Vision-free shortcut:** if every card is either a text card or an image card with a non-empty `detail` (verify in `manifest.json`), SKIP Steps 4 and 5 - no `board_layout.json`, no reconcile. Derive each image card's `label` from its `detail` (first markdown heading, or the subject of the first sentence; keep it short), write it into `manifest.json` with `label_source: "derived_from_detail"`, and go straight to Step 6. The API order already equals the board's visual order, so the manifest is already in the right order; `build_card_manifest.py` and `generate_video.py` both run fine without reconcile (board_pos just shows `-`). If even one image card lacks `detail`, use the vision path below for that card.
 
 View `board_hd.png` (the whole board at once). In ONE pass, identify every
 card **in context** — tier labels are the row headers, neighbors give context
@@ -347,7 +346,4 @@ Cross-platform font detection in the render/compose scripts:
 - **Video encoding fails**: moviepy bundles ffmpeg; if issues, install ffmpeg.
 - **Font missing**: scripts fall back to a default font; install Noto Sans CJK on Linux.
 - **Card unclear**: ask the user to help identify specific cards.
-- **Model can't recognize images**: if you (the running model) have no image
-  recognition, do NOT fabricate card names — stop and tell the user to switch
-  to a multimodal model, or have them name each card. See the "Multimodal is
-  required" section above.
+- **Model can't recognize images**: if you (the running model) have no image recognition, you can STILL finish the video as long as every image card has a non-empty `detail` - derive each label from its `detail` text (vision-free path, see the "Image-card boards" section above). Only cards with NO `detail` block you: do NOT fabricate names for them - stop and tell the user to switch to a multimodal model, add a `detail` (讲解) explanation to those cards in the post, or name them for you.

@@ -110,10 +110,7 @@ stalled. **Do not.** Just `GET` the image URL from the priority chain above.
 - Card images live on `cdn.tiervibe.com`. Downloading them server-side with a
   normal HTTP client works (CORS is a browser-only restriction; a Python
   `requests`/`urllib` fetch is unaffected).
-- **The API does NOT return card text labels.** Card names are baked into the
-  card images. To narrate a card, identify it with AI vision on the downloaded
-  image file. `detail` is the author's written explanation (reference for
-  narration), NOT the card name - don't confuse the two.
+- **The API does NOT return card text labels.** Card names are baked into the card images. The primary way to identify a card is AI vision on the downloaded image file. `detail` is the author's written explanation (reference for narration), NOT the stored card name - don't confuse the two. BUT when vision is unavailable, you can usually DERIVE a short card name from the `detail` (e.g. its first markdown heading, or the subject of the first sentence) and use it as a fallback label (`label_source: "derived_from_detail"`); it's a derived guess, not the canonical name.
 
 ## 4. URL formats
 
