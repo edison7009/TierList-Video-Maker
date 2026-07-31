@@ -9,7 +9,7 @@ description: >
   narrated. Use when the user wants to make/create a video from a TierVibe tier list, turn a tier list
   into a video, or narrate/explain a tier list ranking. Triggers: "tier list video", "tiervibe video",
   "tier list 做成视频", "排行榜视频", "tier list 讲解视频".
-version: 1.0.9
+version: 1.0.10
 metadata:
   openclaw:
     homepage: https://github.com/edison7009/TierList-Video-Maker
@@ -22,7 +22,7 @@ high-resolution background.
 
 ## Transparent image handling
 
-Video composition preserves PNG/WebP alpha for card overlays. Transparent card images are resized with alpha-aware premultiplication and composited with a soft alpha-shaped shadow, not a rectangular dark backing, so cutout/standee images do not get black or semi-transparent boxes around their edges.
+Video composition preserves PNG/WebP alpha for card overlays. Transparent card images are resized with alpha-aware premultiplication and composited on an integrated semi-transparent dark glass backing with a soft dark edge, so cutout/standee images stay readable without black halos or a harsh rectangular box.
 
 ## ⚠️ Only published posts — drafts / still-editing posts cannot be used
 

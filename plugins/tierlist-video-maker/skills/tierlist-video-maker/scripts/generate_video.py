@@ -182,24 +182,45 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
         card_target_w = int(target_w * 0.65)
         scale = card_target_w / card_img.width
         card_target_h = int(card_img.height * scale)
-    # Square card, no white border. Keep a semi-transparent dark backing behind
-    # it (SQUARE, not rounded) so the card stays visible when the blurred
-    # background happens to match its colors. User feedback: keep the outer
-    # dark tint, but no border, square corners, no layered frames.
+    # Transparent cutout cards need a calm surface behind them. Letting every
+    # transparent pixel show the busy scrolling tier list looked noisy, while the
+    # old hard rectangle looked like a bug. Use one integrated dark glass panel:
+    # soft outer edge + semi-transparent fill, then place the RGBA card on top.
     card_resized = resize_rgba_clean(card_img, (card_target_w, card_target_h))
     cx = (target_w - card_resized.width) // 2
     cy = (target_h - card_resized.height) // 2 - int(target_h * 0.03)
     pad = 24
     if has_transparency(card_resized):
-        shadow = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-        alpha = card_resized.getchannel("A").filter(ImageFilter.GaussianBlur(max(8, target_w // 140)))
-        shadow_img = Image.new("RGBA", card_resized.size, (0, 0, 0, 120))
-        shadow.putalpha(Image.new("L", (target_w, target_h), 0))
-        shadow.alpha_composite(shadow_img, (cx + max(6, target_w // 240), cy + max(6, target_w // 240)))
-        shadow_alpha = Image.new("L", (target_w, target_h), 0)
-        shadow_alpha.paste(alpha, (cx + max(6, target_w // 240), cy + max(6, target_w // 240)))
-        shadow.putalpha(shadow_alpha)
-        result = Image.alpha_composite(result.convert("RGBA"), shadow)
+        panel_pad = max(pad, int(target_w * 0.018))
+        panel_rect = [
+            cx - panel_pad,
+            cy - panel_pad,
+            cx + card_resized.width + panel_pad,
+            cy + card_resized.height + panel_pad,
+        ]
+        radius = max(22, int(min(card_resized.width, card_resized.height) * 0.08))
+        edge_blur = max(14, target_w // 120)
+
+        backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        edge_mask = Image.new("L", (target_w, target_h), 0)
+        edge_rect = [
+            panel_rect[0] - edge_blur,
+            panel_rect[1] - edge_blur,
+            panel_rect[2] + edge_blur,
+            panel_rect[3] + edge_blur,
+        ]
+        ImageDraw.Draw(edge_mask).rounded_rectangle(
+            edge_rect, radius=radius + edge_blur, fill=155,
+        )
+        edge_mask = edge_mask.filter(ImageFilter.GaussianBlur(edge_blur))
+        edge = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        edge.putalpha(edge_mask)
+        backing = Image.alpha_composite(backing, edge)
+
+        draw_backing = ImageDraw.Draw(backing)
+        draw_backing.rounded_rectangle(panel_rect, radius=radius, fill=(0, 0, 0, 118))
+        draw_backing.rounded_rectangle(panel_rect, radius=radius, outline=(0, 0, 0, 205), width=max(3, target_w // 420))
+        result = Image.alpha_composite(result.convert("RGBA"), backing)
     else:
         backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
         ImageDraw.Draw(backing).rectangle(
