@@ -1,6 +1,6 @@
 {
   "name": "tierlist-video-maker",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Turn a published TierVibe tier list into a narrated video. Fetches the tier list + card images, captures a high-resolution board image from the public page (Playwright, no server call), identifies cards via AI vision, generates a reviewable narration script, TTS, subtitles, and a scrolling-background video.",
   "author": { "name": "TierVibe", "url": "https://tiervibe.com" },
   "homepage": "https://tiervibe.com",

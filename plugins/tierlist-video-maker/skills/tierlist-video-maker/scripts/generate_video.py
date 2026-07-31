@@ -51,7 +51,7 @@ def ensure_deps():
 
 ensure_deps()
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
 
@@ -182,10 +182,10 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
         card_target_w = int(target_w * 0.65)
         scale = card_target_w / card_img.width
         card_target_h = int(card_img.height * scale)
-    # Transparent cutout cards need a calm surface behind them. Letting every
-    # transparent pixel show the busy scrolling tier list looked noisy, while the
-    # old hard rectangle looked like a bug. Use one integrated dark glass panel:
-    # soft outer edge + semi-transparent fill, then place the RGBA card on top.
+    # Transparent cutout cards need a calm surface behind them. A semi-transparent
+    # glass panel showed the busy tier-list background through it and its outline
+    # looked like an accidental border. Use a clean solid-black stage instead:
+    # no outline, no blur edge, no transparency behind the cutout.
     card_resized = resize_rgba_clean(card_img, (card_target_w, card_target_h))
     cx = (target_w - card_resized.width) // 2
     cy = (target_h - card_resized.height) // 2 - int(target_h * 0.03)
@@ -198,28 +198,8 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
             cx + card_resized.width + panel_pad,
             cy + card_resized.height + panel_pad,
         ]
-        radius = max(22, int(min(card_resized.width, card_resized.height) * 0.08))
-        edge_blur = max(14, target_w // 120)
-
         backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-        edge_mask = Image.new("L", (target_w, target_h), 0)
-        edge_rect = [
-            panel_rect[0] - edge_blur,
-            panel_rect[1] - edge_blur,
-            panel_rect[2] + edge_blur,
-            panel_rect[3] + edge_blur,
-        ]
-        ImageDraw.Draw(edge_mask).rounded_rectangle(
-            edge_rect, radius=radius + edge_blur, fill=155,
-        )
-        edge_mask = edge_mask.filter(ImageFilter.GaussianBlur(edge_blur))
-        edge = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-        edge.putalpha(edge_mask)
-        backing = Image.alpha_composite(backing, edge)
-
-        draw_backing = ImageDraw.Draw(backing)
-        draw_backing.rounded_rectangle(panel_rect, radius=radius, fill=(0, 0, 0, 118))
-        draw_backing.rounded_rectangle(panel_rect, radius=radius, outline=(0, 0, 0, 205), width=max(3, target_w // 420))
+        ImageDraw.Draw(backing).rectangle(panel_rect, fill=(0, 0, 0, 255))
         result = Image.alpha_composite(result.convert("RGBA"), backing)
     else:
         backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
