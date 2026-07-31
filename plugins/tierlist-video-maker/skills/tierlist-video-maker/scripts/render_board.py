@@ -125,7 +125,7 @@ def render_board(work_dir: str, output_path: str, board_width: int = 1920):
             if not os.path.exists(card_path):
                 continue
             try:
-                loaded_cards.append(Image.open(card_path).convert("RGB"))
+                loaded_cards.append(Image.open(card_path).convert("RGBA"))
             except Exception:
                 continue
         if not loaded_cards:
@@ -149,7 +149,10 @@ def render_board(work_dir: str, output_path: str, board_width: int = 1920):
                 row_top += max_row_h + card_gap
                 max_row_h = ch
 
-            board.paste(cimg_resized, (x_cursor, row_top))
+            if cimg_resized.mode == "RGBA":
+                board.paste(cimg_resized, (x_cursor, row_top), cimg_resized)
+            else:
+                board.paste(cimg_resized, (x_cursor, row_top))
             x_cursor += cw + card_gap
             max_row_h = max(max_row_h, ch)
 

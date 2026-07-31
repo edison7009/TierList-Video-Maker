@@ -51,7 +51,7 @@ def ensure_deps():
 
 ensure_deps()
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import numpy as np
 
 
@@ -122,6 +122,30 @@ def darken(img: Image.Image, factor: float = 0.4) -> Image.Image:
     return Image.fromarray(arr.clip(0, 255).astype(np.uint8))
 
 
+def has_transparency(img: Image.Image) -> bool:
+    if img.mode == "P":
+        return "transparency" in img.info
+    if img.mode in ("RGBA", "LA"):
+        alpha = img.getchannel("A")
+        return alpha.getextrema()[0] < 255
+    return False
+
+
+def resize_rgba_clean(img: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Resize RGBA without letting hidden transparent RGB create dark halos."""
+    rgba = img.convert("RGBA")
+    arr = np.asarray(rgba).astype(np.float32)
+    alpha = arr[..., 3:4] / 255.0
+    arr[..., :3] *= alpha
+    resized = Image.fromarray(arr.clip(0, 255).astype(np.uint8), "RGBA").resize(size, Image.LANCZOS)
+
+    out = np.asarray(resized).astype(np.float32)
+    out_alpha = out[..., 3:4] / 255.0
+    np.divide(out[..., :3], out_alpha, out=out[..., :3], where=out_alpha > 0)
+    out[..., :3] = np.where(out_alpha > 0, out[..., :3], 0)
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8), "RGBA")
+
+
 def add_rounded_border(img: Image.Image, border: int = 5,
                        color=(255, 255, 255), radius: int = 16) -> Image.Image:
     w, h = img.size
@@ -162,17 +186,29 @@ def create_card_overlay(frame: Image.Image, card_img: Image.Image,
     # it (SQUARE, not rounded) so the card stays visible when the blurred
     # background happens to match its colors. User feedback: keep the outer
     # dark tint, but no border, square corners, no layered frames.
-    card_resized = card_img.resize((card_target_w, card_target_h), Image.LANCZOS).convert("RGB")
+    card_resized = resize_rgba_clean(card_img, (card_target_w, card_target_h))
     cx = (target_w - card_resized.width) // 2
     cy = (target_h - card_resized.height) // 2 - int(target_h * 0.03)
     pad = 24
-    backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
-    ImageDraw.Draw(backing).rectangle(
-        [cx - pad, cy - pad, cx + card_resized.width + pad, cy + card_resized.height + pad],
-        fill=(0, 0, 0, 140),
-    )
-    result = Image.alpha_composite(result.convert("RGBA"), backing).convert("RGB")
-    result.paste(card_resized, (cx, cy))
+    if has_transparency(card_resized):
+        shadow = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        alpha = card_resized.getchannel("A").filter(ImageFilter.GaussianBlur(max(8, target_w // 140)))
+        shadow_img = Image.new("RGBA", card_resized.size, (0, 0, 0, 120))
+        shadow.putalpha(Image.new("L", (target_w, target_h), 0))
+        shadow.alpha_composite(shadow_img, (cx + max(6, target_w // 240), cy + max(6, target_w // 240)))
+        shadow_alpha = Image.new("L", (target_w, target_h), 0)
+        shadow_alpha.paste(alpha, (cx + max(6, target_w // 240), cy + max(6, target_w // 240)))
+        shadow.putalpha(shadow_alpha)
+        result = Image.alpha_composite(result.convert("RGBA"), shadow)
+    else:
+        backing = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        ImageDraw.Draw(backing).rectangle(
+            [cx - pad, cy - pad, cx + card_resized.width + pad, cy + card_resized.height + pad],
+            fill=(0, 0, 0, 140),
+        )
+        result = Image.alpha_composite(result.convert("RGBA"), backing)
+    result.alpha_composite(card_resized, (cx, cy))
+    result = result.convert("RGB")
 
     # No tier badge (top-left): the scrolling background already shows the full
     # board with every tier label, so a badge here is redundant (user feedback).
@@ -583,7 +619,7 @@ def generate_video(work_dir: str, output_path: str, resolution: str = "1920x1080
         bg_frame = crop_board_at(board, scroll_y, target_w, target_h)
 
         card_path = os.path.join(img_dir, card["image_file"])
-        card_img = Image.open(card_path).convert("RGB")
+        card_img = Image.open(card_path).convert("RGBA")
         frame = create_card_overlay(bg_frame, card_img, tier_name, tier_color,
                                      card_label, target_w, target_h)
 
